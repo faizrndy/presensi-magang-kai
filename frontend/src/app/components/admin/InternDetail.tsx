@@ -21,9 +21,6 @@ interface InternDetailProps {
   onBack: () => void;
 }
 
-// 🔧 KONFIGURASI GLOBAL
-const TOTAL_HARI_KERJA = 22;
-
 export function InternDetail({ internId, onBack }: InternDetailProps) {
   const [intern, setIntern] = useState<InternDetailType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,12 +49,11 @@ export function InternDetail({ internId, onBack }: InternDetailProps) {
     );
   }
 
-  // ✅ HITUNG REAL
+  // 🔥 LANGSUNG DARI BACKEND
   const hadir = intern.hadir ?? 0;
   const izin = intern.izin ?? 0;
   const alpa = intern.alpa ?? 0;
   const percentage = `${intern.percentage ?? 0}%`;
-  
 
   return (
     <div className="space-y-6">
@@ -123,14 +119,21 @@ function SummaryCard({
   icon: any;
   color: "green" | "amber" | "red" | "blue";
 }) {
+  const colorMap = {
+    green: "border-green-500 text-green-600",
+    amber: "border-amber-500 text-amber-600",
+    red: "border-red-500 text-red-600",
+    blue: "border-blue-500 text-blue-600",
+  };
+
   return (
-    <Card className={`p-6 border-l-4 border-${color}-500`}>
+    <Card className={`p-6 border-l-4 ${colorMap[color]}`}>
       <div className="flex justify-between items-center">
         <div>
           <p className="text-sm text-slate-600">{label}</p>
           <p className="text-3xl font-bold">{value}</p>
         </div>
-        <Icon className={`w-8 h-8 text-${color}-600`} />
+        <Icon className={`w-8 h-8 ${colorMap[color]}`} />
       </div>
     </Card>
   );

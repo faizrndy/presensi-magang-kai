@@ -23,20 +23,50 @@ app.get("/api/interns", async (req, res) => {
   res.json(rows);
 });
 
-// GET INTERN BY ID
+// ✅ GET INTERN BY ID (SINKRON WEB UTAMA)
 app.get("/api/interns/:id", async (req, res) => {
-  const [rows] = await db.query(
+  const { id } = req.params;
+
+  // 1️⃣ Ambil data intern
+  const [[intern]] = await db.query(
     "SELECT id, name, school, status FROM interns WHERE id = ?",
-    [req.params.id]
+    [id]
   );
 
-  if (rows.length === 0) {
+  if (!intern) {
     return res.status(404).json({ message: "Peserta tidak ditemukan" });
   }
 
-  res.json(rows[0]);
-});
+  // 2️⃣ Ambil attendance berdasarkan NAMA
+  const [attendance] = await db.query(
+    `
+    SELECT status
+    FROM attendance
+    WHERE LOWER(TRIM(intern)) = LOWER(TRIM(?))
+    `,
+    [intern.name]
+  );
 
+  // 3️⃣ Hitung sesuai WEB UTAMA
+  const hadir = attendance.filter(a => a.status === "hadir").length;
+  const izin  = attendance.filter(a => a.status === "izin").length;
+  const alpa  = attendance.filter(a => a.status === "alpa").length;
+
+  const total = hadir + izin + alpa;
+
+  const percentage =
+    total === 0 ? 0 : Number(((hadir / total) * 100).toFixed(1));
+
+  // 4️⃣ Kirim ke frontend
+  res.json({
+    ...intern,
+    hadir,
+    izin,
+    alpa,
+    total,
+    percentage,
+  });
+});
 
 // ADD INTERN
 app.post("/api/interns", async (req, res) => {
@@ -96,8 +126,6 @@ app.post("/api/attendance", async (req, res) => {
 
   res.json({ message: "Presensi berhasil" });
 });
-
-
 
 app.listen(PORT, () => {
   console.log(`🚀 Backend running http://localhost:${PORT}`);
