@@ -1,75 +1,108 @@
-// ActionCards.tsx
-import { LogIn, CalendarClock } from "lucide-react";
 import { Card } from "./ui/card";
-import { Badge } from "./ui/badge";
 import { toast } from "sonner";
 import { addAttendance, getAttendances } from "../api/attendance.api";
+import { LogIn, CalendarClock, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
-type ActionCardsProps = {
-  userName: string;
-};
+export function ActionCards({ userName, onSuccess }: { userName: string; onSuccess: () => void }) {
+  const today = new Date().toLocaleDateString('en-CA'); 
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [hasCheckedToday, setHasCheckedToday] = useState(false);
 
-export function ActionCards({ userName }: ActionCardsProps) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [locked, setLocked] = useState(false);
-
+  // 1. Reset state hasCheckedToday setiap kali userName berubah
   useEffect(() => {
+    setHasCheckedToday(false); // Reset dulu agar tidak memakai status user sebelumnya
+    
     if (!userName) return;
+    
+    const verifyStatus = async () => {
+      try {
+        const data = await getAttendances();
+        // Pencarian sangat ketat menggunakan lower case dan trim
+        const alreadyAbsen = data.some(
+          (a) => 
+            a.intern.toLowerCase().trim() === userName.toLowerCase().trim() && 
+            a.date.split('T')[0] === today
+        );
+        setHasCheckedToday(alreadyAbsen);
+      } catch (e) {
+        console.error("Gagal verifikasi status hari ini:", e);
+      }
+    };
 
-    async function checkToday() {
-      const data = await getAttendances();
-      const already = data.find(
-        (a) => a.intern === userName && a.date === today
-      );
-      setLocked(!!already);
-    }
-
-    checkToday();
+    verifyStatus();
   }, [userName, today]);
 
   async function handleSubmit(status: "hadir" | "izin") {
-    if (locked) {
-      toast.warning("Anda sudah presensi hari ini");
-      return;
-    }
+    if (!userName) return toast.error("Silakan pilih nama peserta terlebih dahulu!");
+    if (isProcessing || hasCheckedToday) return;
 
-    try {
-      await addAttendance({
-        intern: userName,
-        date: today,
-        status,
-      });
+    setIsProcessing(true);
 
-      toast.success("Presensi berhasil dicatat");
-      setLocked(true);
-    } catch (err: any) {
-      toast.error(err.message || "Gagal presensi");
+    // Di dalam handleSubmit pada ActionCards.tsx
+try {
+  await addAttendance({
+    intern: userName.trim(), 
+    date: today,
+    status: status
+  });
+
+  toast.success(`Berhasil mencatat kehadiran: ${status}`);
+  setHasCheckedToday(true);
+
+  // 🔥 BERI JEDA 800ms (localhost terkadang butuh waktu untuk menulis ke HDD/SSD)
+  setTimeout(() => {
+    onSuccess(); // Ini memicu loadAttendances di App.tsx
+  }, 800);
+
+} catch (err: any) {
+  toast.error(err.message || "Gagal menyimpan ke database.");
+} finally {
+      setIsProcessing(false);
     }
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <Card
-        onClick={() => handleSubmit("hadir")}
-        className={`cursor-pointer ${
-          locked ? "opacity-50 pointer-events-none" : "bg-indigo-600"
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <Card 
+        onClick={() => !hasCheckedToday && handleSubmit("hadir")} 
+        className={`p-6 cursor-pointer text-white shadow-lg border-none transition-all group relative overflow-hidden ${
+          hasCheckedToday || isProcessing ? "bg-slate-400 cursor-not-allowed opacity-80" : "bg-blue-600 hover:bg-blue-700"
         }`}
       >
-        <div className="p-6 text-white">
-          <h3 className="text-xl font-bold">Masuk</h3>
-          {locked && <Badge>Terkunci</Badge>}
+        <div className="flex items-center justify-between relative z-10">
+          <div>
+            <p className="text-xl font-bold italic">Masuk</p>
+            <p className="text-blue-100 text-sm">
+              {isProcessing ? "Memproses..." : hasCheckedToday ? "Sudah Absen Hari Ini" : "Klik untuk hadir hari ini"}
+            </p>
+          </div>
+          {isProcessing ? (
+            <Loader2 className="h-8 w-8 animate-spin" />
+          ) : (
+            <LogIn className={`h-8 w-8 text-blue-100 ${!hasCheckedToday && "group-hover:translate-x-1"} transition-transform`} />
+          )}
         </div>
       </Card>
-
-      <Card
-        onClick={() => handleSubmit("izin")}
-        className={`cursor-pointer ${
-          locked ? "opacity-50 pointer-events-none" : "bg-orange-600"
+      
+      <Card 
+        onClick={() => !hasCheckedToday && handleSubmit("izin")} 
+        className={`p-6 cursor-pointer text-white shadow-lg border-none transition-all group relative overflow-hidden ${
+          hasCheckedToday || isProcessing ? "bg-slate-400 cursor-not-allowed opacity-80" : "bg-orange-600 hover:bg-orange-700"
         }`}
       >
-        <div className="p-6 text-white">
-          <h3 className="text-xl font-bold">Izin</h3>
+        <div className="flex items-center justify-between relative z-10">
+          <div>
+            <p className="text-xl font-bold italic">Izin</p>
+            <p className="text-orange-100 text-sm">
+              {isProcessing ? "Memproses..." : hasCheckedToday ? "Status Sudah Tercatat" : "Klik jika berhalangan hadir"}
+            </p>
+          </div>
+          {isProcessing ? (
+            <Loader2 className="h-8 w-8 animate-spin" />
+          ) : (
+            <CalendarClock className={`h-8 w-8 text-orange-100 ${!hasCheckedToday && "group-hover:scale-110"} transition-transform`} />
+          )}
         </div>
       </Card>
     </div>

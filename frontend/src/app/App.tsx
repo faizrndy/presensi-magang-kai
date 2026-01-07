@@ -17,27 +17,45 @@ export default function App() {
   const [interns, setInterns] = useState<Intern[]>([]);
   const [userName, setUserName] = useState("");
   const [school, setSchool] = useState("");
-
   const [attendances, setAttendances] = useState<Attendance[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Ambil data pertama kali saat aplikasi dimuat
   useEffect(() => {
-    loadInterns();
-    loadAttendances();
+    const fetchData = async () => {
+      try {
+        await Promise.all([loadInterns(), loadAttendances()]);
+      } catch (error) {
+        console.error("Gagal memuat data awal:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
   async function loadInterns() {
     const data = await getInterns();
     setInterns(data);
-
-    if (data.length > 0) {
+    if (data.length > 0 && !userName) {
       setUserName(data[0].name);
       setSchool(data[0].school);
     }
   }
 
+  // Fungsi ini krusial untuk fitur auto-refresh
   async function loadAttendances() {
+    console.log("Mengambil data absensi terbaru...");
     const data = await getAttendances();
-    setAttendances(data);
+    setAttendances(data); // State ini akan dikirim ke Stats dan History
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <p className="text-lg font-medium animate-pulse">Menghubungkan ke database...</p>
+      </div>
+    );
   }
 
   if (isAdmin) {
@@ -46,7 +64,7 @@ export default function App() {
         <AdminApp />
         <Button
           onClick={() => setIsAdmin(false)}
-          className="fixed bottom-6 right-6"
+          className="fixed bottom-6 right-6 z-50 shadow-xl"
         >
           Lihat Portal Peserta
         </Button>
@@ -55,7 +73,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 pb-20">
       <Header />
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
@@ -67,13 +85,13 @@ export default function App() {
           onSchoolChange={setSchool}
         />
 
-        {/* 🔑 KIRIM CALLBACK */}
+        {/* 🔑 Callback onSuccess memicu loadAttendances setelah absen berhasil */}
         <ActionCards
           userName={userName}
           onSuccess={loadAttendances}
         />
 
-        {/* 🔑 KIRIM DATA REAL */}
+        {/* 🔑 Menghitung stats langsung dari array attendances yang terbaru */}
         <AttendanceStats
           attendances={attendances}
           userName={userName}
@@ -81,6 +99,7 @@ export default function App() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
+            {/* 🔑 Menampilkan riwayat dari array attendances yang terbaru */}
             <AttendanceHistory
               attendances={attendances}
               userName={userName}
@@ -95,7 +114,7 @@ export default function App() {
 
       <Button
         onClick={() => setIsAdmin(true)}
-        className="fixed bottom-6 right-6 bg-orange-600"
+        className="fixed bottom-6 right-6 bg-orange-600 hover:bg-orange-700 shadow-xl z-50"
       >
         Lihat Dashboard Admin
       </Button>
