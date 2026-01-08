@@ -1,34 +1,125 @@
-export interface Attendance {
+// ================= TYPES =================
+export interface TodayAttendance {
   id: number;
-  intern: string;
-  date: string;
+  intern_id: number;
+  tanggal: string;
+  jam_masuk: string | null;
+  jam_keluar: string | null;
+  telat_menit: number;
+  pulang_awal_menit: number;
   status: "hadir" | "izin" | "alpa";
 }
 
+export interface AttendanceHistory {
+  tanggal: string;
+  jam_masuk: string | null;
+  telat_menit: number;
+  jam_keluar: string | null;
+  pulang_awal_menit: number;
+  status: "hadir" | "izin" | "alpa";
+}
+
+// ================= BASE =================
 const BASE_URL = "http://localhost:5001/api";
 
-// src/api/attendance.api.ts
-export async function getAttendances(): Promise<Attendance[]> {
-  const res = await fetch(`${BASE_URL}/attendance?t=${Date.now()}`, {
-    method: "GET",
-    headers: {
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache'
+// ================= API =================
+
+// status hari ini
+export async function getTodayAttendance(
+  internId: number
+): Promise<TodayAttendance | null> {
+  const res = await fetch(
+    `${BASE_URL}/attendance/today/${internId}?t=${Date.now()}`,
+    {
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
     }
-  });
+  );
+
+  if (!res.ok) {
+    throw new Error("Gagal mengambil status hari ini");
+  }
+
   return res.json();
 }
 
-export async function addAttendance(data: { intern: string; date: string; status: string }) {
-  const res = await fetch(`${BASE_URL}/attendance`, {
+// check in
+export async function checkIn(intern_id: number) {
+  const res = await fetch(`${BASE_URL}/attendance/checkin`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache",
+    },
+    body: JSON.stringify({ intern_id }),
   });
-  
+
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(err.message || "Gagal menyimpan absensi");
+    throw new Error(err.message || "Gagal check in");
   }
+
+  return res.json();
+}
+
+// check out
+export async function checkOut(intern_id: number) {
+  const res = await fetch(`${BASE_URL}/attendance/checkout`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache",
+    },
+    body: JSON.stringify({ intern_id }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.message || "Gagal check out");
+  }
+
+  return res.json();
+}
+
+// riwayat absensi (tabel)
+export async function getAttendanceHistory(
+  internId: number
+): Promise<AttendanceHistory[]> {
+  const res = await fetch(
+    `${BASE_URL}/attendance/history/${internId}?t=${Date.now()}`,
+    {
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error("Gagal mengambil riwayat absensi");
+  }
+
+  return res.json();
+}
+
+
+// ajukan izin
+export async function izin(intern_id: number) {
+  const res = await fetch(`${BASE_URL}/attendance/izin`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache",
+    },
+    body: JSON.stringify({ intern_id }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.message || "Gagal mengajukan izin");
+  }
+
   return res.json();
 }

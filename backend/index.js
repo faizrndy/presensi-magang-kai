@@ -8,9 +8,9 @@ const PORT = 5001;
 app.use(cors());
 app.use(express.json());
 
-// Middleware No-Cache (Sudah benar, dipertahankan)
+// no cache
 app.use((req, res, next) => {
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
   next();
 });
 
@@ -18,6 +18,13 @@ app.use((req, res, next) => {
 app.get("/", (req, res) => {
   res.send("Backend Absensi Jalan 🚀");
 });
+
+/* ================= HELPER ================= */
+function diffMinutes(time1, time2) {
+  const [h1, m1] = time1.split(":").map(Number);
+  const [h2, m2] = time2.split(":").map(Number);
+  return h1 * 60 + m1 - (h2 * 60 + m2);
+}
 
 /* ================= INTERNS ================= */
 
@@ -29,26 +36,27 @@ app.get("/api/interns", async (req, res) => {
     );
     res.json(rows);
   } catch (error) {
-    console.error("Error Get Interns:", error.message);
     res.status(500).json({ message: "Gagal mengambil data peserta" });
   }
 });
 
-// GET INTERN BY ID DENGAN STATS
+// GET INTERN DETAIL + STATS
 app.get("/api/interns/:id", async (req, res) => {
   const { id } = req.params;
+
   try {
     const [[intern]] = await db.query(
       "SELECT id, name, school, status FROM interns WHERE id = ?",
       [id]
     );
 
-    if (!intern) return res.status(404).json({ message: "Peserta tidak ditemukan" });
+    if (!intern) {
+      return res.status(404).json({ message: "Peserta tidak ditemukan" });
+    }
 
-    // Perbaikan query: ambil semua kolom yang dibutuhkan
     const [attendance] = await db.query(
-      "SELECT status FROM attendance WHERE LOWER(TRIM(intern)) = LOWER(TRIM(?))",
-      [intern.name]
+      "SELECT status FROM attendance WHERE intern_id = ?",
+      [id]
     );
 
     const hadir = attendance.filter(a => a.status === "hadir").length;
@@ -59,70 +67,158 @@ app.get("/api/interns/:id", async (req, res) => {
 
     res.json({ ...intern, hadir, izin, alpa, total, percentage });
   } catch (error) {
-    console.error("Error Get Intern Details:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
 /* ================= ATTENDANCE ================= */
 
-// GET ALL ATTENDANCE
-app.get("/api/attendance", async (req, res) => {
+// GET ATTENDANCE TODAY
+app.get("/api/attendance/today/:internId", async (req, res) => {
+  const { internId } = req.params;
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    const [[row]] = await db.query(
+      "SELECT * FROM attendance WHERE intern_id = ? AND tanggal = ?",
+      [internId, today]
+    );
+    res.json(row || null);
+  } catch (error) {
+    res.status(500).json({ message: "Gagal mengambil data hari ini" });
+  }
+});
+
+// GET ATTENDANCE HISTORY
+app.get("/api/attendance/history/:internId", async (req, res) => {
+  const { internId } = req.params;
+
   try {
     const [rows] = await db.query(
-      "SELECT id, intern, date, status FROM attendance ORDER BY date DESC, id DESC"
+      `SELECT tanggal, jam_masuk, telat_menit, jam_keluar, pulang_awal_menit, status
+       FROM attendance
+       WHERE intern_id = ?
+       ORDER BY tanggal DESC`,
+      [internId]
     );
     res.json(rows);
   } catch (error) {
-    console.error("Error Get Attendance:", error.message);
     res.status(500).json({ message: "Gagal mengambil riwayat" });
   }
 });
 
-// ADD ATTENDANCE (FIXED & LOGGED)
-// backend/index.js - Bagian POST Attendance
-app.post("/api/attendance", async (req, res) => {
-  const { intern, date, status } = req.body;
+// ================= CHECK IN =================
+app.post("/api/attendance/checkin", async (req, res) => {
+  const { intern_id } = req.body;
 
-  if (!intern || !date || !status) {
-    return res.status(400).json({ message: "Data tidak lengkap" });
+  if (!intern_id) {
+    return res.status(400).json({ message: "intern_id wajib" });
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date().toTimeString().slice(0, 5);
+  const JAM_MASUK = "08:00";
+
+  const telat = diffMinutes(now, JAM_MASUK);
+  const telatMenit = telat > 0 ? telat : 0;
+
   try {
-    // 1. Validasi Double Absen
-    const [existing] = await db.query(
-      "SELECT id FROM attendance WHERE LOWER(TRIM(intern)) = LOWER(TRIM(?)) AND date = ?",
-      [intern, date]
+    await db.query(
+      `INSERT INTO attendance 
+       (intern_id, tanggal, jam_masuk, telat_menit, status)
+       VALUES (?, ?, ?, ?, 'hadir')`,
+      [intern_id, today, now, telatMenit]
     );
 
-    if (existing.length > 0) {
-      return res.status(409).json({ message: "Anda sudah presensi hari ini" });
-    }
-
-    // 2. 🔥 EKSEKUSI INSERT DAN TUNGGU KONFIRMASI (AWAIT)
-    const [result] = await db.query(
-      "INSERT INTO attendance (intern, date, status) VALUES (?, ?, ?)",
-      [intern.trim(), date, status]
-    );
-
-    // 3. LOGGING: Cek terminal anda, jika log ini muncul, data PASTI ada di DB
-    console.log(`------------------------------------------`);
-    console.log(`✅ DATABASE UPDATED: ID [${result.insertId}]`);
-    console.log(`👤 Intern: ${intern}`);
-    console.log(`📅 Date: ${date}`);
-    console.log(`------------------------------------------`);
-
-    res.status(201).json({ 
-      message: "Presensi berhasil disimpan", 
-      id: result.insertId 
+    res.json({
+      message: "Check in berhasil",
+      jam_masuk: now,
+      telat_menit: telatMenit,
     });
-
   } catch (error) {
-    console.error("❌ MYSQL ERROR:", error.message);
-    res.status(500).json({ message: "Gagal menyimpan ke database" });
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ message: "Sudah check in hari ini" });
+    }
+    res.status(500).json({ message: "Gagal check in" });
   }
 });
 
+// ================= CHECK OUT =================
+app.post("/api/attendance/checkout", async (req, res) => {
+  const { intern_id } = req.body;
+
+  if (!intern_id) {
+    return res.status(400).json({ message: "intern_id wajib" });
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date().toTimeString().slice(0, 5);
+  const JAM_PULANG = "17:00";
+
+  try {
+    const [[attendance]] = await db.query(
+      "SELECT * FROM attendance WHERE intern_id = ? AND tanggal = ?",
+      [intern_id, today]
+    );
+
+    if (!attendance) {
+      return res.status(400).json({ message: "Belum check in" });
+    }
+
+    if (attendance.jam_keluar) {
+      return res.status(400).json({ message: "Sudah check out" });
+    }
+
+    const pulangAwal = diffMinutes(JAM_PULANG, now);
+    const pulangAwalMenit = pulangAwal > 0 ? pulangAwal : 0;
+
+    await db.query(
+      `UPDATE attendance 
+       SET jam_keluar = ?, pulang_awal_menit = ?
+       WHERE id = ?`,
+      [now, pulangAwalMenit, attendance.id]
+    );
+
+    res.json({
+      message: "Check out berhasil",
+      jam_keluar: now,
+      pulang_awal_menit: pulangAwalMenit,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Gagal check out" });
+  }
+});
+
+// ================= IZIN =================
+app.post("/api/attendance/izin", async (req, res) => {
+  const { intern_id } = req.body;
+
+  if (!intern_id) {
+    return res.status(400).json({ message: "intern_id wajib" });
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    await db.query(
+      `INSERT INTO attendance (intern_id, tanggal, status)
+       VALUES (?, ?, 'izin')`,
+      [intern_id, today]
+    );
+
+    res.json({ message: "Izin berhasil dicatat" });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") {
+      return res
+        .status(409)
+        .json({ message: "Status hari ini sudah tercatat" });
+    }
+    res.status(500).json({ message: "Gagal mencatat izin" });
+  }
+});
+
+
+/* ================= SERVER ================= */
 app.listen(PORT, () => {
   console.log(`🚀 Backend running http://localhost:${PORT}`);
 });

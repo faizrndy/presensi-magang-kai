@@ -1,134 +1,120 @@
-import { CheckCircle2, Clock, XCircle, Calendar } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock,
+  XCircle,
+  Calendar,
+} from "lucide-react";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { ScrollArea } from "./ui/scroll-area";
-import { Attendance } from "../api/attendance.api";
+import { AttendanceHistory as Attendance } from "../api/attendance.api";
 
-// ✅ 1. Tambahkan attendances ke dalam Props (diambil dari App.tsx)
-type AttendanceHistoryProps = {
-  userName: string;
-  attendances: Attendance[]; 
+type Props = {
+  attendances: Attendance[];
 };
 
-type HistoryItem = {
-  type: "present" | "permission" | "absent";
-  title: string;
-  date: string;
-  time: string;
-  status: string;
-  statusColor: string;
-};
+function formatDuration(minutes?: number) {
+  if (!minutes || minutes <= 0) return null;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
+}
 
-export function AttendanceHistory({ userName, attendances }: AttendanceHistoryProps) {
-  // ✅ 2. HAPUS useState DAN useEffect LOKAL.
-  // Kita langsung mengolah data dari Props agar Auto-Update.
+export function AttendanceHistory({ attendances }: Props) {
+  const history = [...attendances]
+    .sort(
+      (a, b) =>
+        new Date(b.tanggal).getTime() -
+        new Date(a.tanggal).getTime()
+    )
+    .slice(0, 10);
 
-  // Proteksi jika data bukan array
-  const safeAttendances = Array.isArray(attendances) ? attendances : [];
-
-  // Filter dan Map data secara real-time
-  const history: HistoryItem[] = safeAttendances
-    .filter((a) => a.intern?.toLowerCase().trim() === userName?.toLowerCase().trim())
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // Urutkan dari yang terbaru
-    .slice(0, 10) // Ambil 10 terakhir
-    .map((item) => {
-      if (item.status === "hadir") {
-        return {
-          type: "present",
-          title: "Hadir",
-          date: formatDate(item.date),
-          time: "—",
-          status: "Hadir",
-          statusColor: "bg-green-100 text-green-700",
-        };
-      }
-      if (item.status === "izin") {
-        return {
-          type: "permission",
-          title: "Izin",
-          date: formatDate(item.date),
-          time: "—",
-          status: "Izin",
-          statusColor: "bg-amber-100 text-amber-700",
-        };
-      }
-      return {
-        type: "absent",
-        title: "Alpa",
-        date: formatDate(item.date),
-        time: "—",
-        status: "Tidak Hadir",
-        statusColor: "bg-red-100 text-red-700",
-      };
-    });
-
-  function formatDate(date: string) {
-    return new Date(date).toLocaleDateString("id-ID", {
-      weekday: "long",
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
-  }
-
-  function getIcon(type: string) {
-    switch (type) {
-      case "present":
-        return <CheckCircle2 className="w-5 h-5 text-green-600" />;
-      case "permission":
-        return <Clock className="w-5 h-5 text-amber-600" />;
-      case "absent":
-        return <XCircle className="w-5 h-5 text-red-600" />;
-      default:
-        return <Calendar className="w-5 h-5 text-slate-600" />;
-    }
+  function icon(status: string) {
+    if (status === "hadir")
+      return <CheckCircle2 className="text-green-600" />;
+    if (status === "izin")
+      return <Clock className="text-amber-600" />;
+    return <XCircle className="text-red-600" />;
   }
 
   return (
-    <Card className="p-6 bg-white/80 backdrop-blur-sm border-slate-200 shadow-sm">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-semibold text-lg text-slate-900 italic">
-          Riwayat Absensi Terakhir
-        </h2>
-      </div>
+    <Card className="p-6 bg-white/80">
+      <h2 className="font-semibold text-lg italic mb-4">
+        Riwayat Absensi Terakhir
+      </h2>
 
-      <ScrollArea className="h-[400px] pr-4">
-        <div className="space-y-3">
-          {history.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-              <Calendar className="w-12 h-12 mb-2 opacity-20" />
-              <p className="text-sm">Belum ada riwayat absensi</p>
+      <ScrollArea className="h-[400px] pr-4 space-y-3">
+        {history.length === 0 && (
+          <div className="text-center text-slate-400 py-12">
+            <Calendar className="mx-auto mb-2 opacity-20" />
+            Belum ada riwayat absensi
+          </div>
+        )}
+
+        {history.map((item, i) => (
+          <div
+            key={i}
+            className="flex gap-4 p-4 rounded-xl border bg-white"
+          >
+            <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center">
+              {icon(item.status)}
             </div>
-          ) : (
-            history.map((item, index) => (
-              <div
-                key={index}
-                className="flex items-start gap-4 p-4 rounded-xl border border-slate-100 bg-white shadow-sm hover:border-indigo-100 transition-colors"
-              >
-                <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center mt-1">
-                  {getIcon(item.type)}
-                </div>
 
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="font-bold text-slate-800">
-                      {item.title}
-                    </h3>
-                    <Badge
-                      variant="secondary"
-                      className={`${item.statusColor} border-0 text-[10px] font-bold`}
-                    >
-                      {item.status}
-                    </Badge>
-                  </div>
-                  <div className="text-xs text-slate-500 font-medium">
-                    {item.date}
-                  </div>
-                </div>
+            <div className="flex-1">
+              <div className="flex justify-between">
+                <h3 className="font-bold capitalize">
+                  {item.status}
+                </h3>
+                <Badge className="text-[10px] capitalize">
+                  {item.status}
+                </Badge>
               </div>
-            ))
-          )}
-        </div>
+
+              <div className="text-xs text-slate-500">
+                {new Date(item.tanggal).toLocaleDateString(
+                  "id-ID",
+                  {
+                    weekday: "long",
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric",
+                  }
+                )}
+              </div>
+
+              <div className="text-[11px] text-slate-400 mt-1">
+                {item.jam_masuk && (
+                  <span>Masuk {item.jam_masuk}</span>
+                )}
+
+                {item.telat_menit > 0 && (
+                  <span className="text-rose-500/80">
+                    {" "}
+                    · Terlambat{" "}
+                    {formatDuration(item.telat_menit)}
+                  </span>
+                )}
+
+                {item.jam_keluar && (
+                  <span>
+                    {" "}
+                    · Pulang {item.jam_keluar}
+                  </span>
+                )}
+
+                {item.pulang_awal_menit > 0 && (
+                  <span className="text-amber-500/80">
+                    {" "}
+                    · Pulang awal{" "}
+                    {formatDuration(
+                      item.pulang_awal_menit
+                    )}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
       </ScrollArea>
     </Card>
   );

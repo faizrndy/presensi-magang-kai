@@ -10,54 +10,67 @@ import { ContactCard } from "./components/ContactCard";
 import { Button } from "./components/ui/button";
 
 import { getInterns } from "./api/intern.api";
-import { getAttendances, Attendance } from "./api/attendance.api";
+import {
+  getAttendanceHistory,
+  AttendanceHistory as AttendanceHistoryType,
+} from "./api/attendance.api";
 
 export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [interns, setInterns] = useState<Intern[]>([]);
-  const [userName, setUserName] = useState("");
-  const [school, setSchool] = useState("");
-  const [attendances, setAttendances] = useState<Attendance[]>([]);
+  const [selectedIntern, setSelectedIntern] = useState<Intern | null>(null);
+
+  const [history, setHistory] = useState<AttendanceHistoryType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Ambil data pertama kali saat aplikasi dimuat
+  /* ================= LOAD AWAL ================= */
   useEffect(() => {
-    const fetchData = async () => {
+    const init = async () => {
       try {
-        await Promise.all([loadInterns(), loadAttendances()]);
+        const internData = await getInterns();
+        setInterns(internData);
+
+        if (internData.length > 0) {
+          setSelectedIntern(internData[0]);
+        }
       } catch (error) {
         console.error("Gagal memuat data awal:", error);
       } finally {
         setIsLoading(false);
       }
     };
-    fetchData();
+
+    init();
   }, []);
 
-  async function loadInterns() {
-    const data = await getInterns();
-    setInterns(data);
-    if (data.length > 0 && !userName) {
-      setUserName(data[0].name);
-      setSchool(data[0].school);
+  /* ================= LOAD RIWAYAT ================= */
+  async function loadHistory(internId: number) {
+    try {
+      const data = await getAttendanceHistory(internId);
+      setHistory(data);
+    } catch (error) {
+      console.error("Gagal mengambil riwayat absensi:", error);
     }
   }
 
-  // Fungsi ini krusial untuk fitur auto-refresh
-  async function loadAttendances() {
-    console.log("Mengambil data absensi terbaru...");
-    const data = await getAttendances();
-    setAttendances(data); // State ini akan dikirim ke Stats dan History
-  }
+  // reload riwayat saat ganti intern
+  useEffect(() => {
+    if (selectedIntern?.id) {
+      loadHistory(selectedIntern.id);
+    }
+  }, [selectedIntern]);
 
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
-        <p className="text-lg font-medium animate-pulse">Menghubungkan ke database...</p>
+        <p className="text-lg font-medium animate-pulse">
+          Menghubungkan ke database...
+        </p>
       </div>
     );
   }
 
+  /* ================= ADMIN ================= */
   if (isAdmin) {
     return (
       <>
@@ -72,6 +85,7 @@ export default function App() {
     );
   }
 
+  /* ================= USER ================= */
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 pb-20">
       <Header />
@@ -79,31 +93,29 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
         <IdentitySection
           interns={interns}
-          userName={userName}
-          school={school}
-          onUserNameChange={setUserName}
-          onSchoolChange={setSchool}
+          userName={selectedIntern?.name || ""}
+          school={selectedIntern?.school || ""}
+          onUserNameChange={(name) => {
+            const found = interns.find((i) => i.name === name);
+            if (found) setSelectedIntern(found);
+          }}
+          onSchoolChange={() => {}}
         />
 
-        {/* 🔑 Callback onSuccess memicu loadAttendances setelah absen berhasil */}
-        <ActionCards
-          userName={userName}
-          onSuccess={loadAttendances}
-        />
+        {/* ================= ACTION ================= */}
+        {selectedIntern && (
+          <ActionCards
+            internId={selectedIntern.id}
+            onSuccess={() => loadHistory(selectedIntern.id)}
+          />
+        )}
 
-        {/* 🔑 Menghitung stats langsung dari array attendances yang terbaru */}
-        <AttendanceStats
-          attendances={attendances}
-          userName={userName}
-        />
+        {/* ================= STATS ================= */}
+        <AttendanceStats attendances={history} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            {/* 🔑 Menampilkan riwayat dari array attendances yang terbaru */}
-            <AttendanceHistory
-              attendances={attendances}
-              userName={userName}
-            />
+            <AttendanceHistory attendances={history} />
           </div>
           <div className="space-y-6">
             <WorkSchedule />

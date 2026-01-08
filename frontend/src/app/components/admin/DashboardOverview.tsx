@@ -9,7 +9,8 @@ import {
 
 import { Card } from "../ui/card";
 import { getInterns } from "../../api/intern.api";
-import { getAttendances } from "../../api/attendance.api";
+import { getAttendanceHistory } from "../../api/attendance.api";
+
 
 /* ===============================
    TYPES

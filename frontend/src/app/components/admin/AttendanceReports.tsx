@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "../ui/table";
 
-import { getAttendances, Attendance } from "../../api/attendance.api";
+import { getAttendanceHistory } from "../../api/attendance.api";
 
 /* ================= TYPES ================= */
 type RecapRow = {
