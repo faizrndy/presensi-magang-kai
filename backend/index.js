@@ -8,7 +8,6 @@ const PORT = 5001;
 app.use(cors());
 app.use(express.json());
 
-// no cache
 app.use((req, res, next) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
   next();
@@ -16,67 +15,55 @@ app.use((req, res, next) => {
 
 /* ================= ROOT ================= */
 app.get("/", (req, res) => {
-  res.send("Backend Absensi Jalan 🚀");
+  res.send("Backend Absensi Shift Ready 🚀");
 });
 
+/* ================= SHIFT CONFIG ================= */
+const SHIFTS = {
+  pagi: {
+    label: "Shift Pagi",
+    start: "08:00:00",
+    end: "13:00:00",
+  },
+  siang: {
+    label: "Shift Siang",
+    start: "12:00:00",
+    end: "16:00:00",
+  },
+};
+
 /* ================= HELPER ================= */
-function diffMinutes(time1, time2) {
-  const [h1, m1] = time1.split(":").map(Number);
-  const [h2, m2] = time2.split(":").map(Number);
-  return h1 * 60 + m1 - (h2 * 60 + m2);
+function timeToMinutes(time) {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function getToday() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getCurrentTime() {
+  return new Date().toTimeString().slice(0, 8); // HH:MM:SS
 }
 
 /* ================= INTERNS ================= */
-
-// GET ALL INTERNS
 app.get("/api/interns", async (req, res) => {
   try {
     const [rows] = await db.query(
       "SELECT id, name, school, status FROM interns ORDER BY id DESC"
     );
     res.json(rows);
-  } catch (error) {
+  } catch {
     res.status(500).json({ message: "Gagal mengambil data peserta" });
-  }
-});
-
-// GET INTERN DETAIL + STATS
-app.get("/api/interns/:id", async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const [[intern]] = await db.query(
-      "SELECT id, name, school, status FROM interns WHERE id = ?",
-      [id]
-    );
-
-    if (!intern) {
-      return res.status(404).json({ message: "Peserta tidak ditemukan" });
-    }
-
-    const [attendance] = await db.query(
-      "SELECT status FROM attendance WHERE intern_id = ?",
-      [id]
-    );
-
-    const hadir = attendance.filter(a => a.status === "hadir").length;
-    const izin  = attendance.filter(a => a.status === "izin").length;
-    const alpa  = attendance.filter(a => a.status === "alpa").length;
-    const total = hadir + izin + alpa;
-    const percentage = total === 0 ? 0 : Number(((hadir / total) * 100).toFixed(1));
-
-    res.json({ ...intern, hadir, izin, alpa, total, percentage });
-  } catch (error) {
-    res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
 /* ================= ATTENDANCE ================= */
 
-// GET ATTENDANCE TODAY
+// TODAY
 app.get("/api/attendance/today/:internId", async (req, res) => {
+  const today = getToday();
   const { internId } = req.params;
-  const today = new Date().toISOString().slice(0, 10);
 
   try {
     const [[row]] = await db.query(
@@ -84,50 +71,71 @@ app.get("/api/attendance/today/:internId", async (req, res) => {
       [internId, today]
     );
     res.json(row || null);
-  } catch (error) {
+  } catch {
     res.status(500).json({ message: "Gagal mengambil data hari ini" });
   }
 });
 
-// GET ATTENDANCE HISTORY
+// HISTORY
 app.get("/api/attendance/history/:internId", async (req, res) => {
-  const { internId } = req.params;
-
   try {
     const [rows] = await db.query(
-      `SELECT tanggal, jam_masuk, telat_menit, jam_keluar, pulang_awal_menit, status
+      `SELECT tanggal, shift, jam_masuk, telat_menit,
+              jam_keluar, pulang_awal_menit, status
        FROM attendance
        WHERE intern_id = ?
        ORDER BY tanggal DESC`,
-      [internId]
+      [req.params.internId]
     );
     res.json(rows);
-  } catch (error) {
+  } catch {
     res.status(500).json({ message: "Gagal mengambil riwayat" });
   }
 });
 
-// ================= CHECK IN =================
+/* ================= CHECK IN ================= */
 app.post("/api/attendance/checkin", async (req, res) => {
-  const { intern_id } = req.body;
+  const { intern_id, shift } = req.body;
 
-  if (!intern_id) {
-    return res.status(400).json({ message: "intern_id wajib" });
+  if (!intern_id || !shift) {
+    return res.status(400).json({ message: "intern_id & shift wajib" });
   }
 
-  const today = new Date().toISOString().slice(0, 10);
-  const now = new Date().toTimeString().slice(0, 5);
-  const JAM_MASUK = "08:00";
+  const shiftCfg = SHIFTS[shift];
+  if (!shiftCfg) {
+    return res.status(400).json({ message: "Shift tidak valid" });
+  }
 
-  const telat = diffMinutes(now, JAM_MASUK);
-  const telatMenit = telat > 0 ? telat : 0;
+  const today = getToday();
+  const now = getCurrentTime();
+
+  const nowMin = timeToMinutes(now);
+  const startMin = timeToMinutes(shiftCfg.start);
+  const endMin = timeToMinutes(shiftCfg.end);
+
+  const durasiShift = endMin - startMin;
 
   try {
+    const [exist] = await db.query(
+      "SELECT id FROM attendance WHERE intern_id = ? AND tanggal = ?",
+      [intern_id, today]
+    );
+
+    if (exist.length > 0) {
+      return res.status(409).json({ message: "Sudah presensi hari ini" });
+    }
+
+    let telatMenit = 0;
+
+    if (nowMin > startMin) {
+      telatMenit = Math.min(nowMin - startMin, durasiShift);
+    }
+
     await db.query(
-      `INSERT INTO attendance 
-       (intern_id, tanggal, jam_masuk, telat_menit, status)
-       VALUES (?, ?, ?, ?, 'hadir')`,
-      [intern_id, today, now, telatMenit]
+      `INSERT INTO attendance
+       (intern_id, tanggal, shift, jam_masuk, telat_menit, status)
+       VALUES (?, ?, ?, ?, ?, 'hadir')`,
+      [intern_id, today, shift, now, telatMenit]
     );
 
     res.json({
@@ -135,88 +143,89 @@ app.post("/api/attendance/checkin", async (req, res) => {
       jam_masuk: now,
       telat_menit: telatMenit,
     });
-  } catch (error) {
-    if (error.code === "ER_DUP_ENTRY") {
-      return res.status(409).json({ message: "Sudah check in hari ini" });
-    }
+  } catch {
     res.status(500).json({ message: "Gagal check in" });
   }
 });
 
-// ================= CHECK OUT =================
+/* ================= CHECK OUT ================= */
 app.post("/api/attendance/checkout", async (req, res) => {
   const { intern_id } = req.body;
-
-  if (!intern_id) {
-    return res.status(400).json({ message: "intern_id wajib" });
-  }
-
-  const today = new Date().toISOString().slice(0, 10);
-  const now = new Date().toTimeString().slice(0, 5);
-  const JAM_PULANG = "17:00";
+  const today = getToday();
+  const now = getCurrentTime();
 
   try {
-    const [[attendance]] = await db.query(
+    const [[att]] = await db.query(
       "SELECT * FROM attendance WHERE intern_id = ? AND tanggal = ?",
       [intern_id, today]
     );
 
-    if (!attendance) {
+    if (!att) {
       return res.status(400).json({ message: "Belum check in" });
     }
 
-    if (attendance.jam_keluar) {
+    if (att.jam_keluar) {
       return res.status(400).json({ message: "Sudah check out" });
     }
 
-    const pulangAwal = diffMinutes(JAM_PULANG, now);
-    const pulangAwalMenit = pulangAwal > 0 ? pulangAwal : 0;
+    const shiftCfg = SHIFTS[att.shift];
+
+    const nowMin = timeToMinutes(now);
+    const endMin = timeToMinutes(shiftCfg.end);
+
+    const jamKeluarDicatat =
+      nowMin > endMin ? shiftCfg.end : now;
+
+    const pulangAwalMenit =
+      nowMin < endMin ? endMin - nowMin : 0;
 
     await db.query(
-      `UPDATE attendance 
+      `UPDATE attendance
        SET jam_keluar = ?, pulang_awal_menit = ?
        WHERE id = ?`,
-      [now, pulangAwalMenit, attendance.id]
+      [jamKeluarDicatat, pulangAwalMenit, att.id]
     );
 
     res.json({
       message: "Check out berhasil",
-      jam_keluar: now,
+      jam_keluar: jamKeluarDicatat,
       pulang_awal_menit: pulangAwalMenit,
     });
-  } catch (error) {
+  } catch {
     res.status(500).json({ message: "Gagal check out" });
   }
 });
 
-// ================= IZIN =================
+/* ================= IZIN ================= */
 app.post("/api/attendance/izin", async (req, res) => {
-  const { intern_id } = req.body;
+  const { intern_id, shift } = req.body;
+  const today = getToday();
 
-  if (!intern_id) {
-    return res.status(400).json({ message: "intern_id wajib" });
+  if (!intern_id || !shift) {
+    return res.status(400).json({ message: "intern_id & shift wajib" });
   }
 
-  const today = new Date().toISOString().slice(0, 10);
-
   try {
-    await db.query(
-      `INSERT INTO attendance (intern_id, tanggal, status)
-       VALUES (?, ?, 'izin')`,
+    const [exist] = await db.query(
+      "SELECT id FROM attendance WHERE intern_id = ? AND tanggal = ?",
       [intern_id, today]
     );
 
-    res.json({ message: "Izin berhasil dicatat" });
-  } catch (error) {
-    if (error.code === "ER_DUP_ENTRY") {
-      return res
-        .status(409)
-        .json({ message: "Status hari ini sudah tercatat" });
+    if (exist.length > 0) {
+      return res.status(409).json({ message: "Sudah ada status hari ini" });
     }
+
+    await db.query(
+      `INSERT INTO attendance (intern_id, tanggal, shift, status)
+       VALUES (?, ?, ?, 'izin')`,
+      [intern_id, today, shift]
+    );
+
+    res.json({ message: "Izin berhasil dicatat" });
+  } catch {
     res.status(500).json({ message: "Gagal mencatat izin" });
   }
 });
-
 
 /* ================= SERVER ================= */
 app.listen(PORT, () => {

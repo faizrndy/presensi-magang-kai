@@ -9,6 +9,21 @@ import { Badge } from "./ui/badge";
 import { ScrollArea } from "./ui/scroll-area";
 import { AttendanceHistory as Attendance } from "../api/attendance.api";
 
+/* ================= SHIFT LABEL ================= */
+const SHIFT_LABEL: Record<
+  "pagi" | "siang",
+  { label: string; time: string }
+> = {
+  pagi: {
+    label: "Shift Pagi",
+    time: "08:00 – 13:00",
+  },
+  siang: {
+    label: "Shift Siang",
+    time: "12:00 – 16:00",
+  },
+};
+
 type Props = {
   attendances: Attendance[];
 };
@@ -51,70 +66,81 @@ export function AttendanceHistory({ attendances }: Props) {
           </div>
         )}
 
-        {history.map((item, i) => (
-          <div
-            key={i}
-            className="flex gap-4 p-4 rounded-xl border bg-white"
-          >
-            <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center">
-              {icon(item.status)}
+        {history.map((item, i) => {
+          const shiftInfo = SHIFT_LABEL[item.shift];
+
+          return (
+            <div
+              key={i}
+              className="flex gap-4 p-4 rounded-xl border bg-white"
+            >
+              <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center">
+                {icon(item.status)}
+              </div>
+
+              <div className="flex-1">
+                <div className="flex justify-between items-start">
+                  <h3 className="font-bold capitalize">
+                    {item.status}
+                  </h3>
+                  <Badge className="text-[10px] capitalize">
+                    {item.status}
+                  </Badge>
+                </div>
+
+                {/* ===== TANGGAL ===== */}
+                <div className="text-xs text-slate-500">
+                  {new Date(item.tanggal).toLocaleDateString(
+                    "id-ID",
+                    {
+                      weekday: "long",
+                      day: "2-digit",
+                      month: "long",
+                      year: "numeric",
+                    }
+                  )}
+                </div>
+
+                {/* ===== SHIFT ===== */}
+                <div className="text-[11px] text-slate-400 mt-0.5">
+                  {shiftInfo.label} ({shiftInfo.time})
+                </div>
+
+                {/* ===== DETAIL JAM ===== */}
+                <div className="text-[11px] text-slate-400 mt-1">
+                  {item.jam_masuk && (
+                    <span>Masuk {item.jam_masuk}</span>
+                  )}
+
+                  {item.telat_menit > 0 && (
+                    <span className="text-rose-500/80">
+                      {" "}
+                      · Terlambat{" "}
+                      {formatDuration(item.telat_menit)}
+                    </span>
+                  )}
+
+                  {item.jam_keluar && (
+                    <span>
+                      {" "}
+                      · Pulang {item.jam_keluar}
+                    </span>
+                  )}
+
+                  {item.pulang_awal_menit > 0 && (
+                    <span className="text-amber-500/80">
+                      {" "}
+                      · Pulang awal{" "}
+                      {formatDuration(
+                        item.pulang_awal_menit
+                      )}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
-
-            <div className="flex-1">
-              <div className="flex justify-between">
-                <h3 className="font-bold capitalize">
-                  {item.status}
-                </h3>
-                <Badge className="text-[10px] capitalize">
-                  {item.status}
-                </Badge>
-              </div>
-
-              <div className="text-xs text-slate-500">
-                {new Date(item.tanggal).toLocaleDateString(
-                  "id-ID",
-                  {
-                    weekday: "long",
-                    day: "2-digit",
-                    month: "long",
-                    year: "numeric",
-                  }
-                )}
-              </div>
-
-              <div className="text-[11px] text-slate-400 mt-1">
-                {item.jam_masuk && (
-                  <span>Masuk {item.jam_masuk}</span>
-                )}
-
-                {item.telat_menit > 0 && (
-                  <span className="text-rose-500/80">
-                    {" "}
-                    · Terlambat{" "}
-                    {formatDuration(item.telat_menit)}
-                  </span>
-                )}
-
-                {item.jam_keluar && (
-                  <span>
-                    {" "}
-                    · Pulang {item.jam_keluar}
-                  </span>
-                )}
-
-                {item.pulang_awal_menit > 0 && (
-                  <span className="text-amber-500/80">
-                    {" "}
-                    · Pulang awal{" "}
-                    {formatDuration(
-                      item.pulang_awal_menit
-                    )}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </ScrollArea>
     </Card>
   );

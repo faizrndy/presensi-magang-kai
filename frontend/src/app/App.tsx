@@ -20,6 +20,8 @@ export default function App() {
   const [interns, setInterns] = useState<Intern[]>([]);
   const [selectedIntern, setSelectedIntern] = useState<Intern | null>(null);
 
+  const [shift, setShift] = useState<"pagi" | "siang">("pagi"); // ✅ SHIFT STATE
+
   const [history, setHistory] = useState<AttendanceHistoryType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -32,6 +34,7 @@ export default function App() {
 
         if (internData.length > 0) {
           setSelectedIntern(internData[0]);
+          setShift("pagi"); // reset aman
         }
       } catch (error) {
         console.error("Gagal memuat data awal:", error);
@@ -57,6 +60,7 @@ export default function App() {
   useEffect(() => {
     if (selectedIntern?.id) {
       loadHistory(selectedIntern.id);
+      setShift("pagi"); // reset shift tiap ganti user (AMAN)
     }
   }, [selectedIntern]);
 
@@ -91,10 +95,13 @@ export default function App() {
       <Header />
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+        {/* ================= IDENTITAS ================= */}
         <IdentitySection
           interns={interns}
           userName={selectedIntern?.name || ""}
           school={selectedIntern?.school || ""}
+          shift={shift}                 // ✅
+          onShiftChange={setShift}      // ✅
           onUserNameChange={(name) => {
             const found = interns.find((i) => i.name === name);
             if (found) setSelectedIntern(found);
@@ -106,6 +113,7 @@ export default function App() {
         {selectedIntern && (
           <ActionCards
             internId={selectedIntern.id}
+            shift={shift}   // ✅ DIKIRIM KE BACKEND
             onSuccess={() => loadHistory(selectedIntern.id)}
           />
         )}
