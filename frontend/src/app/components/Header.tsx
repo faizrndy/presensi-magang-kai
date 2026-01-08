@@ -20,11 +20,14 @@ export function Header() {
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
+          
           {/* Logo and Title */}
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-gradient-to-br from-slate-700 to-slate-900 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">KAI</span>
-            </div>
+            <img
+              src="frontend/public/kai.png"
+              alt="Logo KAI"
+              className="w-10 h-10 object-contain bg-white rounded-md p-1"
+            />
             <div>
               <div className="text-xs text-slate-500 uppercase tracking-wider">
                 PT. KERETA API INDONESIA
@@ -37,6 +40,7 @@ export function Header() {
 
           {/* Actions */}
           <div className="flex items-center gap-4">
+            
             {/* Notifications */}
             <Button variant="ghost" size="icon" className="relative">
               <Bell className="w-5 h-5 text-slate-600" />

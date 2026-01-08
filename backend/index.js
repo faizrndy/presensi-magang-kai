@@ -8,6 +8,7 @@ const PORT = 5001;
 app.use(cors());
 app.use(express.json());
 
+// no cache
 app.use((req, res, next) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
   next();
@@ -18,16 +19,21 @@ app.get("/", (req, res) => {
   res.send("Backend Absensi Shift Ready 🚀");
 });
 
-/* ================= SHIFT CONFIG ================= */
+/* ================= SHIFT CONFIG (FINAL) ================= */
 const SHIFTS = {
-  pagi: {
-    label: "Shift Pagi",
-    start: "08:00:00",
-    end: "13:00:00",
+  shift1: {
+    label: "Shift 1",
+    start: "07:30:00",
+    end: "13:30:00",
   },
-  siang: {
-    label: "Shift Siang",
-    start: "12:00:00",
+  shift2: {
+    label: "Shift 2",
+    start: "12:30:00",
+    end: "18:30:00",
+  },
+  piket: {
+    label: "Piket",
+    start: "08:00:00",
     end: "16:00:00",
   },
 };
@@ -60,7 +66,7 @@ app.get("/api/interns", async (req, res) => {
 
 /* ================= ATTENDANCE ================= */
 
-// TODAY
+// ===== TODAY =====
 app.get("/api/attendance/today/:internId", async (req, res) => {
   const today = getToday();
   const { internId } = req.params;
@@ -76,7 +82,7 @@ app.get("/api/attendance/today/:internId", async (req, res) => {
   }
 });
 
-// HISTORY
+// ===== HISTORY =====
 app.get("/api/attendance/history/:internId", async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -113,8 +119,6 @@ app.post("/api/attendance/checkin", async (req, res) => {
   const startMin = timeToMinutes(shiftCfg.start);
   const endMin = timeToMinutes(shiftCfg.end);
 
-  const durasiShift = endMin - startMin;
-
   try {
     const [exist] = await db.query(
       "SELECT id FROM attendance WHERE intern_id = ? AND tanggal = ?",
@@ -125,10 +129,10 @@ app.post("/api/attendance/checkin", async (req, res) => {
       return res.status(409).json({ message: "Sudah presensi hari ini" });
     }
 
+    // ❗ LOGIKA TERLAMBAT (DIBATASI DURASI SHIFT)
     let telatMenit = 0;
-
     if (nowMin > startMin) {
-      telatMenit = Math.min(nowMin - startMin, durasiShift);
+      telatMenit = Math.min(nowMin - startMin, endMin - startMin);
     }
 
     await db.query(
@@ -140,6 +144,7 @@ app.post("/api/attendance/checkin", async (req, res) => {
 
     res.json({
       message: "Check in berhasil",
+      shift,
       jam_masuk: now,
       telat_menit: telatMenit,
     });
@@ -169,10 +174,14 @@ app.post("/api/attendance/checkout", async (req, res) => {
     }
 
     const shiftCfg = SHIFTS[att.shift];
+    if (!shiftCfg) {
+      return res.status(400).json({ message: "Shift tidak valid (data rusak)" });
+    }
 
     const nowMin = timeToMinutes(now);
     const endMin = timeToMinutes(shiftCfg.end);
 
+    // 🔑 JAM KELUAR DIKUNCI KE JAM SHIFT JIKA MELEBIHI
     const jamKeluarDicatat =
       nowMin > endMin ? shiftCfg.end : now;
 
@@ -203,6 +212,11 @@ app.post("/api/attendance/izin", async (req, res) => {
 
   if (!intern_id || !shift) {
     return res.status(400).json({ message: "intern_id & shift wajib" });
+  }
+
+  const shiftCfg = SHIFTS[shift];
+  if (!shiftCfg) {
+    return res.status(400).json({ message: "Shift tidak valid" });
   }
 
   try {

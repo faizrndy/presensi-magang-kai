@@ -9,18 +9,25 @@ import { Badge } from "./ui/badge";
 import { ScrollArea } from "./ui/scroll-area";
 import { AttendanceHistory as Attendance } from "../api/attendance.api";
 
+/* ================= TYPES ================= */
+type ShiftType = "shift1" | "shift2" | "piket";
+
 /* ================= SHIFT LABEL ================= */
 const SHIFT_LABEL: Record<
-  "pagi" | "siang",
+  ShiftType,
   { label: string; time: string }
 > = {
-  pagi: {
-    label: "Shift Pagi",
-    time: "08:00 – 13:00",
+  shift1: {
+    label: "Shift 1",
+    time: "07:30 – 13:30",
   },
-  siang: {
-    label: "Shift Siang",
-    time: "12:00 – 16:00",
+  shift2: {
+    label: "Shift 2",
+    time: "12:30 – 18:30",
+  },
+  piket: {
+    label: "Piket",
+    time: "08:00 – 16:00",
   },
 };
 
@@ -28,6 +35,7 @@ type Props = {
   attendances: Attendance[];
 };
 
+/* ================= HELPERS ================= */
 function formatDuration(minutes?: number) {
   if (!minutes || minutes <= 0) return null;
   const h = Math.floor(minutes / 60);
@@ -35,6 +43,17 @@ function formatDuration(minutes?: number) {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
 }
 
+function getShiftInfo(shift?: string) {
+  if (shift === "shift1" || shift === "shift2" || shift === "piket") {
+    return SHIFT_LABEL[shift];
+  }
+  return {
+    label: "Shift tidak diketahui",
+    time: "-",
+  };
+}
+
+/* ================= COMPONENT ================= */
 export function AttendanceHistory({ attendances }: Props) {
   const history = [...attendances]
     .sort(
@@ -67,18 +86,20 @@ export function AttendanceHistory({ attendances }: Props) {
         )}
 
         {history.map((item, i) => {
-          const shiftInfo = SHIFT_LABEL[item.shift];
+          const shiftInfo = getShiftInfo(item.shift);
 
           return (
             <div
               key={i}
               className="flex gap-4 p-4 rounded-xl border bg-white"
             >
+              {/* ICON */}
               <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center">
                 {icon(item.status)}
               </div>
 
               <div className="flex-1">
+                {/* HEADER */}
                 <div className="flex justify-between items-start">
                   <h3 className="font-bold capitalize">
                     {item.status}
@@ -88,7 +109,7 @@ export function AttendanceHistory({ attendances }: Props) {
                   </Badge>
                 </div>
 
-                {/* ===== TANGGAL ===== */}
+                {/* TANGGAL */}
                 <div className="text-xs text-slate-500">
                   {new Date(item.tanggal).toLocaleDateString(
                     "id-ID",
@@ -101,12 +122,12 @@ export function AttendanceHistory({ attendances }: Props) {
                   )}
                 </div>
 
-                {/* ===== SHIFT ===== */}
+                {/* SHIFT */}
                 <div className="text-[11px] text-slate-400 mt-0.5">
                   {shiftInfo.label} ({shiftInfo.time})
                 </div>
 
-                {/* ===== DETAIL JAM ===== */}
+                {/* DETAIL JAM */}
                 <div className="text-[11px] text-slate-400 mt-1">
                   {item.jam_masuk && (
                     <span>Masuk {item.jam_masuk}</span>

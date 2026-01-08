@@ -1,52 +1,47 @@
 import { Card } from "./ui/card";
 import { toast } from "sonner";
 import { LogIn, CalendarClock, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   checkIn,
   checkOut,
   getTodayAttendance,
   izin,
+  TodayAttendance,
 } from "../api/attendance.api";
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "./ui/tooltip";
+/* ================= TYPES ================= */
+export type ShiftType = "shift1" | "shift2" | "piket";
 
 type Props = {
   internId: number;
-  shift: "pagi" | "siang";
+  shift: ShiftType;
   onSuccess: () => void;
 };
 
 /* ================= SHIFT CONFIG ================= */
-const SHIFT_INFO = {
-  pagi: {
-    label: "Shift Pagi",
-    start: "08:00",
-    end: "13:00",
+const SHIFT_INFO: Record<
+  ShiftType,
+  { label: string; start: string; end: string }
+> = {
+  shift1: {
+    label: "Shift 1",
+    start: "07:30",
+    end: "23:30",
   },
-  siang: {
-    label: "Shift Siang",
-    start: "12:00",
+  shift2: {
+    label: "Shift 2",
+    start: "12:30",
+    end: "18:30",
+  },
+  piket: {
+    label: "Piket",
+    start: "08:00",
     end: "16:00",
   },
 };
 
 /* ================= HELPERS ================= */
-function timeToMinutes(time: string) {
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
-}
-
-function getCurrentMinutes() {
-  const now = new Date();
-  return now.getHours() * 60 + now.getMinutes();
-}
-
 function formatDuration(minutes?: number) {
   if (!minutes || minutes <= 0) return null;
   const h = Math.floor(minutes / 60);
@@ -54,46 +49,53 @@ function formatDuration(minutes?: number) {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
 }
 
+function isValidShift(val: any): val is ShiftType {
+  return val === "shift1" || val === "shift2" || val === "piket";
+}
+
+/* ================= COMPONENT ================= */
 export function ActionCards({ internId, shift, onSuccess }: Props) {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [todayAttendance, setTodayAttendance] = useState<any>(null);
-
-  const shiftInfo = SHIFT_INFO[shift];
+  const [todayAttendance, setTodayAttendance] =
+    useState<TodayAttendance | null>(null);
 
   /* ================= LOAD TODAY ================= */
   useEffect(() => {
-    if (!internId) return;
+    if (!internId) {
+      setTodayAttendance(null);
+      return;
+    }
+
     getTodayAttendance(internId)
       .then(setTodayAttendance)
       .catch(() => setTodayAttendance(null));
   }, [internId]);
 
-  /* ================= SHIFT TIME CHECK ================= */
-  const isWithinShift = useMemo(() => {
-    const now = getCurrentMinutes();
-    return (
-      now >= timeToMinutes(shiftInfo.start) &&
-      now <= timeToMinutes(shiftInfo.end)
-    );
-  }, [shiftInfo]);
+  /* ================= SHIFT AKTIF (ANTI ERROR) ================= */
+  const activeShift: ShiftType = useMemo(() => {
+    if (isValidShift(todayAttendance?.shift)) {
+      return todayAttendance!.shift;
+    }
+    if (isValidShift(shift)) {
+      return shift;
+    }
+    return "shift1";
+  }, [todayAttendance, shift]);
+
+  const shiftInfo = SHIFT_INFO[activeShift];
 
   /* ================= HANDLERS ================= */
   async function handleCheckIn() {
     if (isProcessing || todayAttendance?.jam_masuk) return;
 
-    if (!isWithinShift) {
-      toast.error(`Check in di luar jam ${shiftInfo.label}`);
-      return;
-    }
-
     setIsProcessing(true);
     try {
-      await checkIn(internId, shift);
+      await checkIn(internId, activeShift);
       toast.success("Check in berhasil");
       onSuccess();
       setTodayAttendance(await getTodayAttendance(internId));
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error(e.message || "Gagal check in");
     } finally {
       setIsProcessing(false);
     }
@@ -114,7 +116,7 @@ export function ActionCards({ internId, shift, onSuccess }: Props) {
       onSuccess();
       setTodayAttendance(await getTodayAttendance(internId));
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error(e.message || "Gagal check out");
     } finally {
       setIsProcessing(false);
     }
@@ -125,31 +127,31 @@ export function ActionCards({ internId, shift, onSuccess }: Props) {
 
     setIsProcessing(true);
     try {
-      await izin(internId, shift);
+      await izin(internId, activeShift);
       toast.success("Izin berhasil dicatat");
       onSuccess();
       setTodayAttendance(await getTodayAttendance(internId));
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error(e.message || "Gagal mengajukan izin");
     } finally {
       setIsProcessing(false);
     }
   }
 
+  /* ================= DISABLE ================= */
   const disableCheckIn =
-    isProcessing ||
-    todayAttendance?.jam_masuk ||
-    !isWithinShift;
+    isProcessing || !!todayAttendance?.jam_masuk;
 
   const disableCheckOut =
     isProcessing ||
     !todayAttendance?.jam_masuk ||
-    todayAttendance?.jam_keluar;
+    !!todayAttendance?.jam_keluar;
 
+  /* ================= UI ================= */
   return (
     <div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* ================= CHECK IN ================= */}
+        {/* CHECK IN */}
         <Card
           onClick={!disableCheckIn ? handleCheckIn : undefined}
           className={`p-6 text-white border-none ${
@@ -161,19 +163,17 @@ export function ActionCards({ internId, shift, onSuccess }: Props) {
           <div className="flex justify-between">
             <div>
               <p className="text-xl font-bold italic">Check In</p>
-
-              <p className="text-sm opacity-90">
+              <p className="text-xs opacity-90">
+                {shiftInfo.label} • {shiftInfo.start} – {shiftInfo.end}
+              </p>
+              <p className="text-sm opacity-90 mt-1">
                 Jam Masuk: {todayAttendance?.jam_masuk || "—"}
               </p>
 
               {todayAttendance?.telat_menit > 0 && (
                 <div className="mt-1 text-xs text-rose-100/90">
-                  <b>{shiftInfo.label}</b> • Terlambat{" "}
+                  Terlambat{" "}
                   {formatDuration(todayAttendance.telat_menit)}
-                  <br />
-                  <span className="opacity-80">
-                    (Jam masuk {shiftInfo.start})
-                  </span>
                 </div>
               )}
             </div>
@@ -182,7 +182,7 @@ export function ActionCards({ internId, shift, onSuccess }: Props) {
           </div>
         </Card>
 
-        {/* ================= CHECK OUT ================= */}
+        {/* CHECK OUT */}
         <Card
           onClick={!disableCheckOut ? handleCheckOut : undefined}
           className={`p-6 text-white border-none ${
@@ -194,19 +194,17 @@ export function ActionCards({ internId, shift, onSuccess }: Props) {
           <div className="flex justify-between">
             <div>
               <p className="text-xl font-bold italic">Check Out</p>
-
-              <p className="text-sm opacity-90">
+              <p className="text-xs opacity-90">
+                {shiftInfo.label} • {shiftInfo.start} – {shiftInfo.end}
+              </p>
+              <p className="text-sm opacity-90 mt-1">
                 Jam Keluar: {todayAttendance?.jam_keluar || "—"}
               </p>
 
               {todayAttendance?.pulang_awal_menit > 0 && (
                 <div className="mt-1 text-xs text-amber-100/90">
-                  <b>{shiftInfo.label}</b> • Pulang lebih awal{" "}
+                  Pulang lebih awal{" "}
                   {formatDuration(todayAttendance.pulang_awal_menit)}
-                  <br />
-                  <span className="opacity-80">
-                    (Jam pulang {shiftInfo.end})
-                  </span>
                 </div>
               )}
             </div>
@@ -220,7 +218,7 @@ export function ActionCards({ internId, shift, onSuccess }: Props) {
         </Card>
       </div>
 
-      {/* ================= IZIN ================= */}
+      {/* IZIN */}
       <div className="flex justify-center mt-4">
         <button
           onClick={handleIzin}

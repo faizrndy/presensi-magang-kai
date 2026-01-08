@@ -2,7 +2,12 @@
    TYPES
 ===================================================== */
 
-export type ShiftType = "pagi" | "siang";
+/**
+ * 🔑 HARUS SAMA DENGAN BACKEND (index.js)
+ * SHIFTS = { shift1, shift2, piket }
+ */
+export type ShiftType = "shift1" | "shift2" | "piket";
+
 export type AttendanceStatus = "hadir" | "izin" | "alpa";
 
 export interface TodayAttendance {
@@ -59,7 +64,7 @@ export async function getTodayAttendance(
   return data ?? null;
 }
 
-/* ================= CHECK IN (SHIFT AWARE) ================= */
+/* ================= CHECK IN ================= */
 export async function checkIn(
   intern_id: number,
   shift: ShiftType
@@ -70,7 +75,10 @@ export async function checkIn(
       "Content-Type": "application/json",
       ...NO_CACHE_HEADERS,
     },
-    body: JSON.stringify({ intern_id, shift }),
+    body: JSON.stringify({
+      intern_id,
+      shift, // ⬅️ shift1 | shift2 | piket
+    }),
   });
 
   if (!res.ok) {
@@ -116,7 +124,7 @@ export async function getAttendanceHistory(
   return res.json();
 }
 
-/* ================= IZIN (SHIFT AWARE) ================= */
+/* ================= IZIN ================= */
 export async function izin(
   intern_id: number,
   shift: ShiftType
@@ -127,7 +135,10 @@ export async function izin(
       "Content-Type": "application/json",
       ...NO_CACHE_HEADERS,
     },
-    body: JSON.stringify({ intern_id, shift }),
+    body: JSON.stringify({
+      intern_id,
+      shift, // ⬅️ HARUS shift1 | shift2 | piket
+    }),
   });
 
   if (!res.ok) {

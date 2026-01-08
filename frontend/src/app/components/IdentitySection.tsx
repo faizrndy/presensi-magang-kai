@@ -11,23 +11,33 @@ import {
 } from "./ui/select";
 import { TodayAttendance } from "../api/attendance.api";
 
+/* ================= TYPES ================= */
 export type Intern = {
   id: number;
   name: string;
   school: string;
 };
 
+export type ShiftType = "shift1" | "shift2" | "piket";
+
 interface IdentitySectionProps {
   interns: Intern[];
   userName: string;
   school: string;
-  shift: "pagi" | "siang";
+  shift: ShiftType;
   todayAttendance: TodayAttendance | null;
 
   onUserNameChange: (name: string) => void;
   onSchoolChange: (school: string) => void;
-  onShiftChange: (shift: "pagi" | "siang") => void;
+  onShiftChange: (shift: ShiftType) => void;
 }
+
+/* ================= SHIFT INFO ================= */
+const SHIFT_LABEL: Record<ShiftType, string> = {
+  shift1: "Shift 1 (07:30 – 13:30)",
+  shift2: "Shift 2 (12:30 – 18:30)",
+  piket: "Piket (08:00 – 16:00)",
+};
 
 export function IdentitySection({
   interns,
@@ -42,19 +52,20 @@ export function IdentitySection({
   /* ================= AUTO ISI SEKOLAH ================= */
   useEffect(() => {
     const selected = interns.find((i) => i.name === userName);
-    if (selected) {
+    if (selected && selected.school !== school) {
       onSchoolChange(selected.school);
     }
-  }, [userName, interns, onSchoolChange]);
+  }, [userName, interns, school, onSchoolChange]);
 
   /* ================= SHIFT DIKUNCI JIKA SUDAH PRESENSI ================= */
   const isShiftLocked = !!todayAttendance;
 
+  /* ================= SINKRON SHIFT DARI DB ================= */
   useEffect(() => {
-    if (todayAttendance?.shift) {
-      onShiftChange(todayAttendance.shift);
+    if (todayAttendance?.shift && todayAttendance.shift !== shift) {
+      onShiftChange(todayAttendance.shift as ShiftType);
     }
-  }, [todayAttendance, onShiftChange]);
+  }, [todayAttendance, shift, onShiftChange]);
 
   return (
     <Card className="p-6 bg-white/80 backdrop-blur-sm border-slate-200 shadow-sm">
@@ -108,21 +119,24 @@ export function IdentitySection({
 
               <Select
                 value={shift}
-                onValueChange={(v) =>
-                  !isShiftLocked && onShiftChange(v as "pagi" | "siang")
-                }
                 disabled={isShiftLocked}
+                onValueChange={(v) =>
+                  !isShiftLocked && onShiftChange(v as ShiftType)
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Pilih shift kerja" />
                 </SelectTrigger>
 
                 <SelectContent>
-                  <SelectItem value="pagi">
-                    Shift Pagi (08:00 – 13:00)
+                  <SelectItem value="shift1">
+                    {SHIFT_LABEL.shift1}
                   </SelectItem>
-                  <SelectItem value="siang">
-                    Shift Siang (12:00 – 16:00)
+                  <SelectItem value="shift2">
+                    {SHIFT_LABEL.shift2}
+                  </SelectItem>
+                  <SelectItem value="piket">
+                    {SHIFT_LABEL.piket}
                   </SelectItem>
                 </SelectContent>
               </Select>
