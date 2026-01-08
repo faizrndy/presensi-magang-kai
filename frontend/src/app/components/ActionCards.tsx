@@ -27,7 +27,7 @@ const SHIFT_INFO: Record<
   shift1: {
     label: "Shift 1",
     start: "07:30",
-    end: "23:30",
+    end: "13:30",
   },
   shift2: {
     label: "Shift 2",

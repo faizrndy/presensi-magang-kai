@@ -24,9 +24,10 @@ export function Header() {
           {/* Logo and Title */}
           <div className="flex items-center gap-4">
             <img
-              src="frontend/public/kai.png"
+              src="/kai.png"
+
               alt="Logo KAI"
-              className="w-10 h-10 object-contain bg-white rounded-md p-1"
+              className="w-14 h-14 object-contain bg-white rounded-md p-1"
             />
             <div>
               <div className="text-xs text-slate-500 uppercase tracking-wider">

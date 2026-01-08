@@ -19,7 +19,7 @@ app.get("/", (req, res) => {
   res.send("Backend Absensi Shift Ready 🚀");
 });
 
-/* ================= SHIFT CONFIG (FINAL) ================= */
+/* ================= SHIFT CONFIG ================= */
 const SHIFTS = {
   shift1: {
     label: "Shift 1",
@@ -38,7 +38,7 @@ const SHIFTS = {
   },
 };
 
-/* ================= HELPER ================= */
+/* ================= HELPERS ================= */
 function timeToMinutes(time) {
   const [h, m] = time.split(":").map(Number);
   return h * 60 + m;
@@ -59,14 +59,15 @@ app.get("/api/interns", async (req, res) => {
       "SELECT id, name, school, status FROM interns ORDER BY id DESC"
     );
     res.json(rows);
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Gagal mengambil data peserta" });
   }
 });
 
 /* ================= ATTENDANCE ================= */
 
-// ===== TODAY =====
+/* ===== TODAY ===== */
 app.get("/api/attendance/today/:internId", async (req, res) => {
   const today = getToday();
   const { internId } = req.params;
@@ -77,12 +78,13 @@ app.get("/api/attendance/today/:internId", async (req, res) => {
       [internId, today]
     );
     res.json(row || null);
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Gagal mengambil data hari ini" });
   }
 });
 
-// ===== HISTORY =====
+/* ===== HISTORY ===== */
 app.get("/api/attendance/history/:internId", async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -94,7 +96,8 @@ app.get("/api/attendance/history/:internId", async (req, res) => {
       [req.params.internId]
     );
     res.json(rows);
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Gagal mengambil riwayat" });
   }
 });
@@ -118,6 +121,7 @@ app.post("/api/attendance/checkin", async (req, res) => {
   const nowMin = timeToMinutes(now);
   const startMin = timeToMinutes(shiftCfg.start);
   const endMin = timeToMinutes(shiftCfg.end);
+  const durasiShift = endMin - startMin;
 
   try {
     const [exist] = await db.query(
@@ -129,10 +133,17 @@ app.post("/api/attendance/checkin", async (req, res) => {
       return res.status(409).json({ message: "Sudah presensi hari ini" });
     }
 
-    // ❗ LOGIKA TERLAMBAT (DIBATASI DURASI SHIFT)
+    // ⛔ OPSIONAL: blok check-in di luar jam kerja
+    if (nowMin < startMin || nowMin > endMin) {
+      return res.status(400).json({
+        message: `Check in di luar jam ${shiftCfg.label}`,
+      });
+    }
+
+    // 🔑 TERLAMBAT (dibatasi durasi shift)
     let telatMenit = 0;
     if (nowMin > startMin) {
-      telatMenit = Math.min(nowMin - startMin, endMin - startMin);
+      telatMenit = Math.min(nowMin - startMin, durasiShift);
     }
 
     await db.query(
@@ -148,7 +159,8 @@ app.post("/api/attendance/checkin", async (req, res) => {
       jam_masuk: now,
       telat_menit: telatMenit,
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Gagal check in" });
   }
 });
@@ -181,7 +193,7 @@ app.post("/api/attendance/checkout", async (req, res) => {
     const nowMin = timeToMinutes(now);
     const endMin = timeToMinutes(shiftCfg.end);
 
-    // 🔑 JAM KELUAR DIKUNCI KE JAM SHIFT JIKA MELEBIHI
+    // 🔒 jam keluar dikunci ke jam shift bila lebih
     const jamKeluarDicatat =
       nowMin > endMin ? shiftCfg.end : now;
 
@@ -200,7 +212,8 @@ app.post("/api/attendance/checkout", async (req, res) => {
       jam_keluar: jamKeluarDicatat,
       pulang_awal_menit: pulangAwalMenit,
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Gagal check out" });
   }
 });
@@ -214,8 +227,7 @@ app.post("/api/attendance/izin", async (req, res) => {
     return res.status(400).json({ message: "intern_id & shift wajib" });
   }
 
-  const shiftCfg = SHIFTS[shift];
-  if (!shiftCfg) {
+  if (!SHIFTS[shift]) {
     return res.status(400).json({ message: "Shift tidak valid" });
   }
 
@@ -236,7 +248,8 @@ app.post("/api/attendance/izin", async (req, res) => {
     );
 
     res.json({ message: "Izin berhasil dicatat" });
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Gagal mencatat izin" });
   }
 });
