@@ -49,7 +49,7 @@ function getToday() {
 }
 
 function getCurrentTime() {
-  return new Date().toTimeString().slice(0, 8); // HH:MM:SS
+  return new Date().toTimeString().slice(0, 8);
 }
 
 /* ================= INTERNS ================= */
@@ -121,7 +121,6 @@ app.post("/api/attendance/checkin", async (req, res) => {
   const nowMin = timeToMinutes(now);
   const startMin = timeToMinutes(shiftCfg.start);
   const endMin = timeToMinutes(shiftCfg.end);
-  const durasiShift = endMin - startMin;
 
   try {
     const [exist] = await db.query(
@@ -133,17 +132,12 @@ app.post("/api/attendance/checkin", async (req, res) => {
       return res.status(409).json({ message: "Sudah presensi hari ini" });
     }
 
-    // ⛔ OPSIONAL: blok check-in di luar jam kerja
-    if (nowMin < startMin || nowMin > endMin) {
-      return res.status(400).json({
-        message: `Check in di luar jam ${shiftCfg.label}`,
-      });
-    }
-
-    // 🔑 TERLAMBAT (dibatasi durasi shift)
+    // ✅ LOGIKA TELAT FINAL
+    // sebelum jam shift → TIDAK TELAT
+    // setelah jam shift → hitung selisih
     let telatMenit = 0;
     if (nowMin > startMin) {
-      telatMenit = Math.min(nowMin - startMin, durasiShift);
+      telatMenit = Math.min(nowMin - startMin, endMin - startMin);
     }
 
     await db.query(
@@ -193,7 +187,7 @@ app.post("/api/attendance/checkout", async (req, res) => {
     const nowMin = timeToMinutes(now);
     const endMin = timeToMinutes(shiftCfg.end);
 
-    // 🔒 jam keluar dikunci ke jam shift bila lebih
+    // 🔒 jam keluar dikunci ke jam shift jika lewat
     const jamKeluarDicatat =
       nowMin > endMin ? shiftCfg.end : now;
 

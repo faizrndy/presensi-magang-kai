@@ -11,7 +11,6 @@ import { Card } from "../ui/card";
 import { getInterns } from "../../api/intern.api";
 import { getAttendanceHistory } from "../../api/attendance.api";
 
-
 /* ===============================
    TYPES
 ================================ */
@@ -21,8 +20,13 @@ type Activity = {
   time: string;
 };
 
+type Intern = {
+  id: number;
+  name: string;
+};
+
 /* ===============================
-   HELPER (LOGIC ONLY)
+   HELPER
 ================================ */
 function isToday(dateString: string) {
   const today = new Date();
@@ -50,51 +54,50 @@ export function DashboardOverview() {
   }, []);
 
   /* ===============================
-     FIXED LOGIC (NO UI CHANGE)
+     LOGIC FIXED
   ================================ */
   async function loadData() {
     try {
-      const interns = await getInterns();
-      const attendances = await getAttendances();
-
-      // total peserta
+      const interns: Intern[] = await getInterns();
       setTotalInterns(interns.length);
 
-      // absensi hari ini
-      const todayAttendances = attendances.filter(a =>
-        isToday(a.date)
-      );
+      let hadir = 0;
+      let izin = 0;
+      const todayActivities: Activity[] = [];
 
-      const hadir = todayAttendances.filter(
-        a => a.status === "hadir"
-      );
+      for (const intern of interns) {
+        const history = await getAttendanceHistory(intern.id);
 
-      const izin = todayAttendances.filter(
-        a => a.status === "izin"
-      );
+        const todayAttendance = history.find(a =>
+          isToday(a.tanggal)
+        );
+
+        if (!todayAttendance) continue;
+
+        if (todayAttendance.status === "hadir") hadir++;
+        if (todayAttendance.status === "izin") izin++;
+
+        todayActivities.push({
+          name: intern.name,
+          action:
+            todayAttendance.status === "hadir"
+              ? "Hadir"
+              : todayAttendance.status === "izin"
+              ? "Izin"
+              : "Alpa",
+          time: todayAttendance.tanggal,
+        });
+      }
 
       const alpa =
-        interns.length - hadir.length - izin.length;
+        interns.length - hadir - izin;
 
-      setHadirHariIni(hadir.length);
-      setIzinHariIni(izin.length);
+      setHadirHariIni(hadir);
+      setIzinHariIni(izin);
       setAlpaHariIni(alpa);
 
-      // aktivitas terbaru
       setActivities(
-        todayAttendances
-          .slice(-5)
-          .reverse()
-          .map(a => ({
-            name: a.intern,
-            action:
-              a.status === "hadir"
-                ? "Hadir"
-                : a.status === "izin"
-                ? "Izin"
-                : "Alpa",
-            time: a.date,
-          }))
+        todayActivities.slice(-5).reverse()
       );
     } catch (err) {
       console.error("Gagal load dashboard overview", err);
@@ -102,7 +105,7 @@ export function DashboardOverview() {
   }
 
   /* ===============================
-     UI (AS IS – TIDAK DIUBAH)
+     UI (TIDAK DIUBAH)
   ================================ */
   return (
     <div className="space-y-6">
