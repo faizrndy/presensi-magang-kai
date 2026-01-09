@@ -16,8 +16,13 @@ import { getAttendanceHistory } from "../../api/attendance.api";
 ================================ */
 type Activity = {
   name: string;
-  action: string;
-  time: string;
+  status: "hadir" | "izin" | "alpa";
+  shift: "shift1" | "shift2" | "piket";
+  tanggal: string;
+  jam_masuk: string | null;
+  jam_keluar: string | null;
+  telat_menit: number;
+  pulang_awal_menit: number;
 };
 
 type Intern = {
@@ -26,7 +31,16 @@ type Intern = {
 };
 
 /* ===============================
-   HELPER
+   SHIFT INFO
+================================ */
+const SHIFT_INFO = {
+  shift1: "Shift 1 (07:30 – 13:30)",
+  shift2: "Shift 2 (12:30 – 18:30)",
+  piket: "Piket (08:00 – 16:00)",
+};
+
+/* ===============================
+   HELPERS
 ================================ */
 function isToday(dateString: string) {
   const today = new Date();
@@ -37,6 +51,23 @@ function isToday(dateString: string) {
     d.getMonth() === today.getMonth() &&
     d.getFullYear() === today.getFullYear()
   );
+}
+
+function formatDateTime(dateString: string) {
+  return new Date(dateString).toLocaleString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Jakarta",
+  });
+}
+
+function formatDuration(minutes: number) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
 /* ===============================
@@ -53,9 +84,6 @@ export function DashboardOverview() {
     loadData();
   }, []);
 
-  /* ===============================
-     LOGIC FIXED
-  ================================ */
   async function loadData() {
     try {
       const interns: Intern[] = await getInterns();
@@ -79,109 +107,47 @@ export function DashboardOverview() {
 
         todayActivities.push({
           name: intern.name,
-          action:
-            todayAttendance.status === "hadir"
-              ? "Hadir"
-              : todayAttendance.status === "izin"
-              ? "Izin"
-              : "Alpa",
-          time: todayAttendance.tanggal,
+          status: todayAttendance.status,
+          shift: todayAttendance.shift,
+          tanggal: todayAttendance.tanggal,
+          jam_masuk: todayAttendance.jam_masuk,
+          jam_keluar: todayAttendance.jam_keluar,
+          telat_menit: todayAttendance.telat_menit,
+          pulang_awal_menit: todayAttendance.pulang_awal_menit,
         });
       }
 
-      const alpa =
-        interns.length - hadir - izin;
+      const alpa = interns.length - hadir - izin;
 
       setHadirHariIni(hadir);
       setIzinHariIni(izin);
       setAlpaHariIni(alpa);
 
-      setActivities(
-        todayActivities.slice(-5).reverse()
-      );
+      setActivities(todayActivities.slice(-5).reverse());
     } catch (err) {
       console.error("Gagal load dashboard overview", err);
     }
   }
 
   /* ===============================
-     UI (TIDAK DIUBAH)
+     UI
   ================================ */
   return (
     <div className="space-y-6">
+      {/* ===== SUMMARY ===== */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <div className="flex items-center gap-4 p-4">
-            <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
-              <Users size={24} />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">
-                Total Peserta
-              </p>
-              <p className="text-2xl font-bold">
-                {totalInterns}
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="flex items-center gap-4 p-4">
-            <div className="p-2 rounded-lg bg-green-100 text-green-600">
-              <UserCheck size={24} />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">
-                Hadir Hari Ini
-              </p>
-              <p className="text-2xl font-bold">
-                {hadirHariIni}
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="flex items-center gap-4 p-4">
-            <div className="p-2 rounded-lg bg-red-100 text-red-600">
-              <UserX size={24} />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">
-                Tidak Hadir
-              </p>
-              <p className="text-2xl font-bold">
-                {alpaHariIni}
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="flex items-center gap-4 p-4">
-            <div className="p-2 rounded-lg bg-yellow-100 text-yellow-600">
-              <CalendarClock size={24} />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">
-                Total Izin
-              </p>
-              <p className="text-2xl font-bold">
-                {izinHariIni}
-              </p>
-            </div>
-          </div>
-        </Card>
+        <SummaryCard icon={<Users />} label="Total Peserta" value={totalInterns} />
+        <SummaryCard icon={<UserCheck />} label="Hadir Hari Ini" value={hadirHariIni} />
+        <SummaryCard icon={<UserX />} label="Tidak Hadir" value={alpaHariIni} />
+        <SummaryCard icon={<CalendarClock />} label="Total Izin" value={izinHariIni} />
       </div>
 
+      {/* ===== ACTIVITY ===== */}
       <Card>
         <div className="p-4">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp size={18} />
-            <h3 className="font-semibold">
-              Aktivitas Terbaru
-            </h3>
+            <h3 className="font-semibold">Aktivitas Terbaru</h3>
           </div>
 
           {activities.length === 0 ? (
@@ -189,22 +155,40 @@ export function DashboardOverview() {
               Belum ada aktivitas hari ini
             </p>
           ) : (
-            <ul className="space-y-3">
+            <ul className="space-y-4">
               {activities.map((a, i) => (
                 <li
                   key={i}
-                  className="flex justify-between text-sm"
+                  className="flex justify-between items-start text-sm border-b pb-3"
                 >
                   <div>
-                    <p className="font-medium">
-                      {a.name}
+                    <p className="font-medium">{a.name}</p>
+
+                    <p className="text-xs text-slate-500">
+                      {SHIFT_INFO[a.shift]}
                     </p>
-                    <p className="text-gray-500">
-                      {a.action}
+
+                    <p className="text-xs mt-1">
+                      Masuk: <b>{a.jam_masuk || "—"}</b> · Pulang:{" "}
+                      <b>{a.jam_keluar || "—"}</b>
                     </p>
+
+                    {a.telat_menit > 0 && (
+                      <p className="text-xs text-rose-600 mt-0.5">
+                        ⏰ Terlambat {formatDuration(a.telat_menit)}
+                      </p>
+                    )}
+
+                    {a.pulang_awal_menit > 0 && (
+                      <p className="text-xs text-amber-600 mt-0.5">
+                        ⏳ Pulang lebih awal{" "}
+                        {formatDuration(a.pulang_awal_menit)}
+                      </p>
+                    )}
                   </div>
-                  <p className="text-gray-400">
-                    {a.time}
+
+                  <p className="text-xs text-gray-400">
+                    {formatDateTime(a.tanggal)}
                   </p>
                 </li>
               ))}
@@ -213,5 +197,32 @@ export function DashboardOverview() {
         </div>
       </Card>
     </div>
+  );
+}
+
+/* ===============================
+   MINI COMPONENT
+================================ */
+function SummaryCard({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+}) {
+  return (
+    <Card>
+      <div className="flex items-center gap-4 p-4">
+        <div className="p-2 rounded-lg bg-slate-100 text-slate-600">
+          {icon}
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{label}</p>
+          <p className="text-2xl font-bold">{value}</p>
+        </div>
+      </div>
+    </Card>
   );
 }
