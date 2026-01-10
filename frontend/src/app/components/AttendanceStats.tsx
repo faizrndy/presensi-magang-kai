@@ -9,24 +9,42 @@ import { Card } from "./ui/card";
 import { Progress } from "./ui/progress";
 import { AttendanceHistory } from "../api/attendance.api";
 
+/* ================= TYPES ================= */
 type Props = {
-  attendances: AttendanceHistory[];
+  attendances: AttendanceHistory[] | null | undefined;
 };
 
-export function AttendanceStats({ attendances }: Props) {
-  // proteksi
-  const safeData = Array.isArray(attendances) ? attendances : [];
+type StatColor = "green" | "amber" | "red" | "slate";
 
-  // hitung status
-  const hadir = safeData.filter((a) => a.status === "hadir").length;
-  const izin = safeData.filter((a) => a.status === "izin").length;
-  const alpa = safeData.filter((a) => a.status === "alpa").length;
+type StatProps = {
+  label: string;
+  value: number;
+  icon: any;
+  color?: StatColor;
+};
+
+/* ================= COMPONENT ================= */
+export function AttendanceStats({ attendances }: Props) {
+  /* ================= SAFE DATA ================= */
+  const safeData: AttendanceHistory[] = Array.isArray(attendances)
+    ? attendances
+    : [];
+
+  /* ================= COUNT STATUS ================= */
+  const hadir = safeData.filter(a => a.status === "hadir").length;
+  const izin = safeData.filter(a => a.status === "izin").length;
+  const alpa = safeData.filter(a => a.status === "alpa").length;
 
   const total = hadir + izin + alpa;
-  const percentage = total === 0 ? 0 : Math.round((hadir / total) * 100);
 
+  /* ================= PERCENTAGE ================= */
+  const percentage =
+    total === 0 ? 0 : Math.round((hadir / total) * 100);
+
+  /* ================= UI ================= */
   return (
     <div className="space-y-4">
+      {/* HEADER */}
       <div className="flex items-center gap-2">
         <TrendingUp className="w-5 h-5 text-slate-700" />
         <h2 className="font-semibold text-lg text-slate-900">
@@ -34,43 +52,77 @@ export function AttendanceStats({ attendances }: Props) {
         </h2>
       </div>
 
+      {/* STATS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Stat label="TOTAL ABSEN" value={total} icon={CalendarDays} />
-        <Stat label="HADIR" value={hadir} icon={CheckCircle2} color="green" />
-        <Stat label="IZIN" value={izin} icon={Clock} color="amber" />
-        <Stat label="ALPA" value={alpa} icon={XCircle} color="red" />
+        <Stat
+          label="TOTAL ABSEN"
+          value={total}
+          icon={CalendarDays}
+        />
 
+        <Stat
+          label="HADIR"
+          value={hadir}
+          icon={CheckCircle2}
+          color="green"
+        />
+
+        <Stat
+          label="IZIN"
+          value={izin}
+          icon={Clock}
+          color="amber"
+        />
+
+        <Stat
+          label="ALPA"
+          value={alpa}
+          icon={XCircle}
+          color="red"
+        />
+
+        {/* PERCENT CARD */}
         <Card className="p-4 bg-gradient-to-br from-indigo-600 to-blue-700 text-white shadow-lg border-none">
           <div className="text-[10px] mb-1 opacity-90 font-bold uppercase tracking-wider">
             Kehadiran
           </div>
-          <div className="text-3xl font-black">{percentage}%</div>
-          <Progress value={percentage} className="h-1.5 mt-3 bg-white/20" />
+          <div className="text-3xl font-black">
+            {percentage}%
+          </div>
+          <Progress
+            value={percentage}
+            className="h-1.5 mt-3 bg-white/20"
+          />
         </Card>
       </div>
     </div>
   );
 }
 
-function Stat({ label, value, icon: Icon, color = "slate" }: any) {
-  const colorMap: any = {
+/* ================= STAT ITEM ================= */
+function Stat({
+  label,
+  value,
+  icon: Icon,
+  color = "slate",
+}: StatProps) {
+  const colorMap: Record<StatColor, string> = {
     green: "text-green-600 bg-green-50",
     amber: "text-amber-500 bg-amber-50",
     red: "text-red-600 bg-red-50",
     slate: "text-slate-600 bg-slate-50",
   };
 
+  const [textColor, bgColor] = colorMap[color].split(" ");
+
   return (
     <Card className="p-4 shadow-sm border-slate-100 flex flex-col justify-between">
       <div
-        className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-          colorMap[color].split(" ")[1]
-        }`}
+        className={`w-8 h-8 rounded-lg flex items-center justify-center ${bgColor}`}
       >
-        <Icon
-          className={`w-5 h-5 ${colorMap[color].split(" ")[0]}`}
-        />
+        <Icon className={`w-5 h-5 ${textColor}`} />
       </div>
+
       <div className="mt-3">
         <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
           {label}

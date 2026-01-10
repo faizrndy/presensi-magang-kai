@@ -17,61 +17,43 @@ const SHIFT_LABEL: Record<
   ShiftType,
   { label: string; time: string }
 > = {
-  shift1: {
-    label: "Shift 1",
-    time: "07:30 – 13:30",
-  },
-  shift2: {
-    label: "Shift 2",
-    time: "12:30 – 18:30",
-  },
-  piket: {
-    label: "Piket",
-    time: "08:00 – 16:00",
-  },
+  shift1: { label: "Shift 1", time: "07:30 – 13:30" },
+  shift2: { label: "Shift 2", time: "12:30 – 18:30" },
+  piket: { label: "Piket", time: "08:00 – 16:00" },
 };
 
 type Props = {
-  attendances: Attendance[];
+  attendances?: Attendance[] | null;
 };
 
 /* ================= HELPERS ================= */
 function formatDuration(minutes?: number) {
   if (!minutes || minutes <= 0) return null;
-
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(
-    2,
-    "0"
-  )}:00`;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
 }
 
 function getShiftInfo(shift?: string) {
-  if (shift === "shift1" || shift === "shift2" || shift === "piket") {
-    return SHIFT_LABEL[shift];
+  if (shift && SHIFT_LABEL[shift as ShiftType]) {
+    return SHIFT_LABEL[shift as ShiftType];
   }
-
-  return {
-    label: "Shift tidak diketahui",
-    time: "-",
-  };
+  return null;
 }
 
-function getStatusIcon(status: string) {
-  if (status === "hadir") {
+function getStatusIcon(status?: string) {
+  if (status === "hadir")
     return <CheckCircle2 className="text-green-600" />;
-  }
-  if (status === "izin") {
+  if (status === "izin")
     return <Clock className="text-amber-600" />;
-  }
   return <XCircle className="text-red-600" />;
 }
 
 /* ================= COMPONENT ================= */
 export function AttendanceHistory({ attendances }: Props) {
-  const history = [...attendances]
+  const safeData = Array.isArray(attendances) ? attendances : [];
+
+  const history = [...safeData]
     .sort(
       (a, b) =>
         new Date(b.tanggal).getTime() -
@@ -96,6 +78,7 @@ export function AttendanceHistory({ attendances }: Props) {
 
           {history.map((item, i) => {
             const shiftInfo = getShiftInfo(item.shift);
+            const isAlpa = item.status === "alpa";
 
             return (
               <div
@@ -131,42 +114,45 @@ export function AttendanceHistory({ attendances }: Props) {
                     )}
                   </div>
 
-                  {/* SHIFT */}
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    {shiftInfo.label} ({shiftInfo.time})
-                  </div>
+                  {/* ⛔ SHIFT & JAM HANYA JIKA BUKAN ALPA */}
+                  {!isAlpa && shiftInfo && (
+                    <>
+                      {/* SHIFT */}
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        {shiftInfo.label} ({shiftInfo.time})
+                      </div>
 
-                  {/* DETAIL JAM */}
-                  <div className="text-[11px] text-slate-400 mt-1">
-                    {item.jam_masuk && (
-                      <span>Masuk {item.jam_masuk}</span>
-                    )}
-
-                    {item.telat_menit > 0 && (
-                      <span className="text-rose-500/80">
-                        {" "}
-                        · Terlambat{" "}
-                        {formatDuration(item.telat_menit)}
-                      </span>
-                    )}
-
-                    {item.jam_keluar && (
-                      <span>
-                        {" "}
-                        · Pulang {item.jam_keluar}
-                      </span>
-                    )}
-
-                    {item.pulang_awal_menit > 0 && (
-                      <span className="text-amber-500/80">
-                        {" "}
-                        · Pulang awal{" "}
-                        {formatDuration(
-                          item.pulang_awal_menit
+                      {/* DETAIL JAM */}
+                      <div className="text-[11px] text-slate-400 mt-1">
+                        {item.jam_masuk && (
+                          <span>Masuk {item.jam_masuk}</span>
                         )}
-                      </span>
-                    )}
-                  </div>
+
+                        {item.telat_menit > 0 && (
+                          <span className="text-rose-500/80">
+                            {" "}
+                            · Terlambat{" "}
+                            {formatDuration(item.telat_menit)}
+                          </span>
+                        )}
+
+                        {item.jam_keluar && (
+                          <span>
+                            {" "}
+                            · Pulang {item.jam_keluar}
+                          </span>
+                        )}
+
+                        {item.pulang_awal_menit > 0 && (
+                          <span className="text-amber-500/80">
+                            {" "}
+                            · Pulang awal{" "}
+                            {formatDuration(item.pulang_awal_menit)}
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             );

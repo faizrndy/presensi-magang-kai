@@ -15,7 +15,7 @@ export type ShiftType = "shift1" | "shift2" | "piket";
 
 type Props = {
   internId: number;
-  shift: ShiftType;
+  shift: ShiftType; // dari dropdown (HANYA sebelum check-in)
   onSuccess: () => void;
 };
 
@@ -24,21 +24,9 @@ const SHIFT_INFO: Record<
   ShiftType,
   { label: string; start: string; end: string }
 > = {
-  shift1: {
-    label: "Shift 1",
-    start: "07:30",
-    end: "13:30",
-  },
-  shift2: {
-    label: "Shift 2",
-    start: "12:30",
-    end: "18:30",
-  },
-  piket: {
-    label: "Piket",
-    start: "08:00",
-    end: "16:00",
-  },
+  shift1: { label: "Shift 1", start: "07:30", end: "13:30" },
+  shift2: { label: "Shift 2", start: "12:30", end: "18:30" },
+  piket: { label: "Piket", start: "08:00", end: "16:00" },
 };
 
 /* ================= HELPERS ================= */
@@ -71,14 +59,18 @@ export function ActionCards({ internId, shift, onSuccess }: Props) {
       .catch(() => setTodayAttendance(null));
   }, [internId]);
 
-  /* ================= SHIFT AKTIF (ANTI ERROR) ================= */
+  /* ================= SHIFT FINAL (TERKUNCI) ================= */
   const activeShift: ShiftType = useMemo(() => {
+    // 🔒 JIKA SUDAH CHECK-IN / IZIN / ALPA → PAKAI SHIFT DATABASE
     if (isValidShift(todayAttendance?.shift)) {
-      return todayAttendance!.shift;
+      return todayAttendance.shift;
     }
+
+    // ⛔ BELUM CHECK-IN → BOLEH DARI DROPDOWN
     if (isValidShift(shift)) {
       return shift;
     }
+
     return "shift1";
   }, [todayAttendance, shift]);
 
@@ -86,7 +78,12 @@ export function ActionCards({ internId, shift, onSuccess }: Props) {
 
   /* ================= HANDLERS ================= */
   async function handleCheckIn() {
-    if (isProcessing || todayAttendance?.jam_masuk) return;
+    if (
+      isProcessing ||
+      todayAttendance?.jam_masuk ||
+      todayAttendance?.status === "alpa"
+    )
+      return;
 
     setIsProcessing(true);
     try {
@@ -138,9 +135,11 @@ export function ActionCards({ internId, shift, onSuccess }: Props) {
     }
   }
 
-  /* ================= DISABLE ================= */
+  /* ================= DISABLE LOGIC ================= */
   const disableCheckIn =
-    isProcessing || !!todayAttendance?.jam_masuk;
+    isProcessing ||
+    !!todayAttendance?.jam_masuk ||
+    todayAttendance?.status === "alpa";
 
   const disableCheckOut =
     isProcessing ||
@@ -151,7 +150,7 @@ export function ActionCards({ internId, shift, onSuccess }: Props) {
   return (
     <div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* CHECK IN */}
+        {/* ================= CHECK IN ================= */}
         <Card
           onClick={!disableCheckIn ? handleCheckIn : undefined}
           className={`p-6 text-white border-none ${
@@ -166,23 +165,34 @@ export function ActionCards({ internId, shift, onSuccess }: Props) {
               <p className="text-xs opacity-90">
                 {shiftInfo.label} • {shiftInfo.start} – {shiftInfo.end}
               </p>
+
               <p className="text-sm opacity-90 mt-1">
                 Jam Masuk: {todayAttendance?.jam_masuk || "—"}
               </p>
 
               {todayAttendance?.telat_menit > 0 && (
-                <div className="mt-1 text-xs text-rose-100/90">
+                <div className="mt-1 text-xs text-rose-100">
                   Terlambat{" "}
                   {formatDuration(todayAttendance.telat_menit)}
                 </div>
               )}
+
+              {todayAttendance?.jam_masuk && (
+                <div className="mt-1 text-[10px] opacity-80">
+                  🔒 Shift terkunci setelah check-in
+                </div>
+              )}
             </div>
 
-            {isProcessing ? <Loader2 className="animate-spin" /> : <LogIn />}
+            {isProcessing ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <LogIn />
+            )}
           </div>
         </Card>
 
-        {/* CHECK OUT */}
+        {/* ================= CHECK OUT ================= */}
         <Card
           onClick={!disableCheckOut ? handleCheckOut : undefined}
           className={`p-6 text-white border-none ${
@@ -197,12 +207,13 @@ export function ActionCards({ internId, shift, onSuccess }: Props) {
               <p className="text-xs opacity-90">
                 {shiftInfo.label} • {shiftInfo.start} – {shiftInfo.end}
               </p>
+
               <p className="text-sm opacity-90 mt-1">
                 Jam Keluar: {todayAttendance?.jam_keluar || "—"}
               </p>
 
               {todayAttendance?.pulang_awal_menit > 0 && (
-                <div className="mt-1 text-xs text-amber-100/90">
+                <div className="mt-1 text-xs text-amber-100">
                   Pulang lebih awal{" "}
                   {formatDuration(todayAttendance.pulang_awal_menit)}
                 </div>
@@ -218,7 +229,7 @@ export function ActionCards({ internId, shift, onSuccess }: Props) {
         </Card>
       </div>
 
-      {/* IZIN */}
+      {/* ================= IZIN ================= */}
       <div className="flex justify-center mt-4">
         <button
           onClick={handleIzin}
