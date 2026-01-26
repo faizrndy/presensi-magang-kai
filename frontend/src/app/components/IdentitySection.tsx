@@ -1,5 +1,4 @@
-import { useEffect } from "react";
-import { User, Clock, Lock } from "lucide-react";
+import { User } from "lucide-react";
 import { Card } from "./ui/card";
 import { Label } from "./ui/label";
 import {
@@ -9,144 +8,121 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
-import { TodayAttendance } from "../api/attendance.api";
 
-/* ================= TYPES ================= */
-export type Intern = {
-  id: number;
-  name: string;
-  school: string;
+export const SHIFTS = {
+  shift1: {
+    label: "Shift 1 (07:30 – 13:30)",
+    start: "07:30",
+    end: "13:30",
+  },
+  shift2: {
+    label: "Shift 2 (12:30 – 18:30)",
+    start: "12:30",
+    end: "18:30",
+  },
+  piket: {
+    label: "Piket (08:00 – 16:00)",
+    start: "08:00",
+    end: "16:00",
+  },
 };
 
-export type ShiftType = "shift1" | "shift2" | "piket";
+export type ShiftKey = keyof typeof SHIFTS;
+export type AttendanceType = ShiftKey | "libur" | "izin";
 
 interface IdentitySectionProps {
-  interns: Intern[];
+  interns: any[];
   userName: string;
   school: string;
-  shift: ShiftType;
-  todayAttendance: TodayAttendance | null;
-
+  selectedShift: AttendanceType | "";
   onUserNameChange: (name: string) => void;
-  onSchoolChange: (school: string) => void;
-  onShiftChange: (shift: ShiftType) => void;
+  onShiftChange: (shift: AttendanceType) => void;
 }
-
-/* ================= SHIFT INFO ================= */
-const SHIFT_LABEL: Record<ShiftType, string> = {
-  shift1: "Shift 1 (07:30 – 13:30)",
-  shift2: "Shift 2 (12:30 – 18:30)",
-  piket: "Piket (08:00 – 16:00)",
-};
 
 export function IdentitySection({
   interns,
   userName,
   school,
-  shift,
-  todayAttendance,
+  selectedShift,
   onUserNameChange,
-  onSchoolChange,
   onShiftChange,
 }: IdentitySectionProps) {
-  /* ================= AUTO ISI SEKOLAH ================= */
-  useEffect(() => {
-    const selected = interns.find((i) => i.name === userName);
-    if (selected && selected.school !== school) {
-      onSchoolChange(selected.school);
-    }
-  }, [userName, interns, school, onSchoolChange]);
-
-  /* ================= SHIFT DIKUNCI JIKA SUDAH PRESENSI ================= */
-  const isShiftLocked = !!todayAttendance;
-
-  /* ================= SINKRON SHIFT DARI DB ================= */
-  useEffect(() => {
-    if (todayAttendance?.shift && todayAttendance.shift !== shift) {
-      onShiftChange(todayAttendance.shift as ShiftType);
-    }
-  }, [todayAttendance, shift, onShiftChange]);
-
   return (
-    <Card className="p-6 bg-white/80 backdrop-blur-sm border-slate-200 shadow-sm">
-      <div className="flex items-start gap-4">
-        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+    <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
+      <div className="flex flex-col md:flex-row items-start gap-4">
+        {/* Avatar */}
+        <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
           <User className="w-6 h-6 text-white" />
         </div>
 
-        <div className="flex-1 space-y-4">
-          <div>
-            <h2 className="font-semibold text-lg text-slate-900">
+        <div className="flex-1 w-full">
+          <div className="mb-4">
+            <h2 className="font-bold text-lg text-slate-800">
               Identitas Peserta
             </h2>
-            <p className="text-sm text-slate-600 mt-1">
-              Pilih nama dan shift kerja sebelum melakukan absensi.
+            <p className="text-xs text-slate-500">
+              Pilih nama dan status kehadiran hari ini.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* ================= NAMA ================= */}
-            <div className="space-y-2">
-              <Label>Nama Peserta</Label>
+            {/* Nama */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-bold text-slate-600 uppercase">
+                Nama Peserta
+              </Label>
               <Select value={userName} onValueChange={onUserNameChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih nama peserta" />
+                <SelectTrigger className="h-10 bg-slate-50 border-slate-200 rounded-lg">
+                  <SelectValue placeholder="Pilih nama" />
                 </SelectTrigger>
                 <SelectContent>
-                  {interns.map((intern) => (
-                    <SelectItem key={intern.id} value={intern.name}>
-                      {intern.name}
+                  {interns.map((i) => (
+                    <SelectItem key={i.id} value={i.name}>
+                      {i.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* ================= SEKOLAH ================= */}
-            <div className="space-y-2">
-              <Label>Asal Sekolah / Kampus</Label>
-              <div className="px-3 py-2 border rounded-md bg-slate-100 text-slate-700">
+            {/* Sekolah */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-bold text-slate-600 uppercase">
+                Asal Sekolah / Kampus
+              </Label>
+              <div className="h-10 px-3 flex items-center bg-slate-100 border border-slate-200 rounded-lg text-slate-500 text-sm">
                 {school || "—"}
               </div>
             </div>
 
-            {/* ================= SHIFT ================= */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1">
-                <Clock className="w-4 h-4 text-slate-500" />
-                Shift Kerja
+            {/* Shift / Libur / Izin */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-bold text-slate-600 uppercase">
+                Status Kehadiran
               </Label>
-
               <Select
-                value={shift}
-                disabled={isShiftLocked}
-                onValueChange={(v) =>
-                  !isShiftLocked && onShiftChange(v as ShiftType)
+                value={selectedShift}
+                onValueChange={(value) =>
+                  onShiftChange(value as AttendanceType)
                 }
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih shift kerja" />
+                <SelectTrigger className="h-10 bg-slate-50 border-slate-200 rounded-lg">
+                  <SelectValue placeholder="Pilih status" />
                 </SelectTrigger>
 
                 <SelectContent>
-                  <SelectItem value="shift1">
-                    {SHIFT_LABEL.shift1}
-                  </SelectItem>
-                  <SelectItem value="shift2">
-                    {SHIFT_LABEL.shift2}
-                  </SelectItem>
-                  <SelectItem value="piket">
-                    {SHIFT_LABEL.piket}
-                  </SelectItem>
+                  {/* ===== SHIFT ===== */}
+                  {Object.entries(SHIFTS).map(([key, shift]) => (
+                    <SelectItem key={key} value={key}>
+                      {shift.label}
+                    </SelectItem>
+                  ))}
+
+                  {/* ===== LIBUR & IZIN ===== */}
+                  <SelectItem value="libur">Libur</SelectItem>
+                  <SelectItem value="izin">Izin</SelectItem>
                 </SelectContent>
               </Select>
-
-              {isShiftLocked && (
-                <p className="flex items-center gap-1 text-xs text-slate-500 mt-1">
-                  <Lock className="w-3 h-3" />
-                  Shift dikunci karena sudah presensi hari ini
-                </p>
-              )}
             </div>
           </div>
         </div>

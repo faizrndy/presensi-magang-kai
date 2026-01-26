@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import AdminApp from "./AdminApp";
 import { Header } from "./components/Header";
-import { IdentitySection, Intern } from "./components/IdentitySection";
+import {
+  IdentitySection,
+  ShiftKey,
+} from "./components/IdentitySection";
 import { ActionCards } from "./components/ActionCards";
 import { AttendanceStats } from "./components/AttendanceStats";
 import { AttendanceHistory } from "./components/AttendanceHistory";
@@ -15,110 +18,100 @@ import {
   AttendanceHistory as AttendanceHistoryType,
 } from "./api/attendance.api";
 
+import type { Intern } from "./components/IdentitySection";
+
 export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [interns, setInterns] = useState<Intern[]>([]);
   const [selectedIntern, setSelectedIntern] = useState<Intern | null>(null);
 
-  const [shift, setShift] = useState<"pagi" | "siang">("pagi"); // ✅ SHIFT STATE
-
+  const [shift, setShift] = useState<ShiftKey | "">("");
   const [history, setHistory] = useState<AttendanceHistoryType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  /* ================= LOAD AWAL ================= */
   useEffect(() => {
     const init = async () => {
       try {
-        const internData = await getInterns();
-        setInterns(internData);
-
-        if (internData.length > 0) {
-          setSelectedIntern(internData[0]);
-          setShift("pagi"); // reset aman
-        }
-      } catch (error) {
-        console.error("Gagal memuat data awal:", error);
+        const data = await getInterns();
+        setInterns(data);
+        if (data.length > 0) setSelectedIntern(data[0]);
+      } catch (e) {
+        console.error("Gagal memuat data peserta:", e);
       } finally {
         setIsLoading(false);
       }
     };
-
     init();
   }, []);
 
-  /* ================= LOAD RIWAYAT ================= */
   async function loadHistory(internId: number) {
     try {
       const data = await getAttendanceHistory(internId);
       setHistory(data);
-    } catch (error) {
-      console.error("Gagal mengambil riwayat absensi:", error);
+    } catch (e) {
+      console.error("Gagal memuat riwayat:", e);
+      setHistory([]);
     }
   }
 
-  // reload riwayat saat ganti intern
   useEffect(() => {
     if (selectedIntern?.id) {
       loadHistory(selectedIntern.id);
-      setShift("pagi"); // reset shift tiap ganti user (AMAN)
+    } else {
+      setHistory([]);
     }
   }, [selectedIntern]);
 
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
-        <p className="text-lg font-medium animate-pulse">
-          Menghubungkan ke database...
-        </p>
+        Memuat Portal Magang...
       </div>
     );
   }
 
-  /* ================= ADMIN ================= */
   if (isAdmin) {
     return (
       <>
         <AdminApp />
         <Button
           onClick={() => setIsAdmin(false)}
-          className="fixed bottom-6 right-6 z-50 shadow-xl"
+          className="fixed bottom-6 right-6 rounded-lg px-4 py-2"
         >
-          Lihat Portal Peserta
+          Kembali ke Portal Peserta
         </Button>
       </>
     );
   }
 
-  /* ================= USER ================= */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 pb-20">
+    <div className="min-h-screen bg-[#f8fafc] pb-20">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-        {/* ================= IDENTITAS ================= */}
+      <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
         <IdentitySection
           interns={interns}
           userName={selectedIntern?.name || ""}
           school={selectedIntern?.school || ""}
-          shift={shift}                 // ✅
-          onShiftChange={setShift}      // ✅
+          selectedShift={shift}
           onUserNameChange={(name) => {
             const found = interns.find((i) => i.name === name);
-            if (found) setSelectedIntern(found);
+            if (found) {
+              setSelectedIntern(found);
+              setShift("");
+            }
           }}
-          onSchoolChange={() => {}}
+          onShiftChange={(val) => setShift(val)}
         />
 
-        {/* ================= ACTION ================= */}
         {selectedIntern && (
           <ActionCards
             internId={selectedIntern.id}
-            shift={shift}   // ✅ DIKIRIM KE BACKEND
+            shift={shift || null}
             onSuccess={() => loadHistory(selectedIntern.id)}
           />
         )}
 
-        {/* ================= STATS ================= */}
         <AttendanceStats attendances={history} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -132,9 +125,11 @@ export default function App() {
         </div>
       </main>
 
+      {/* ✅ BUTTON PESERTA – SUDAH KOTAK */}
       <Button
         onClick={() => setIsAdmin(true)}
-        className="fixed bottom-6 right-6 bg-orange-600 hover:bg-orange-700 shadow-xl z-50"
+        className="fixed bottom-6 right-6 bg-[#f85a16] text-white 
+                   rounded-lg px-4 py-2 font-semibold shadow-lg"
       >
         Lihat Dashboard Admin
       </Button>

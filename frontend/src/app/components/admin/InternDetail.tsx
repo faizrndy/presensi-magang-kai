@@ -49,7 +49,7 @@ export function InternDetail({ internId, onBack }: InternDetailProps) {
     );
   }
 
-  // 🔥 LANGSUNG DARI BACKEND
+  
   const hadir = intern.hadir ?? 0;
   const izin = intern.izin ?? 0;
   const alpa = intern.alpa ?? 0;

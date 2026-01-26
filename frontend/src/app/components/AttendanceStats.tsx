@@ -35,29 +35,32 @@ export function AttendanceStats({ attendances }: Props) {
   const izin = safeData.filter(a => a.status === "izin").length;
   const alpa = safeData.filter(a => a.status === "alpa").length;
 
-  const total = hadir + izin + alpa;
+  // Total absen di sini biasanya jumlah hari kerja yang sudah berlalu
+  const total = safeData.length;
 
   /* ================= PERCENTAGE ================= */
+  // Logika: (Hadir / Total) * 100. Jika total 0, maka 0%.
   const percentage =
     total === 0 ? 0 : Math.round((hadir / total) * 100);
 
   /* ================= UI ================= */
   return (
-    <div className="space-y-4">
+    <div className="space-y-5 mt-8">
       {/* HEADER */}
-      <div className="flex items-center gap-2">
-        <TrendingUp className="w-5 h-5 text-slate-700" />
-        <h2 className="font-semibold text-lg text-slate-900">
+      <div className="flex items-center gap-2 mb-2">
+        <TrendingUp className="w-5 h-5 text-slate-500" />
+        <h2 className="font-bold text-lg text-slate-800 tracking-tight">
           Ringkasan Kehadiran
         </h2>
       </div>
 
-      {/* STATS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* GRID STATS */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-5">
         <Stat
           label="TOTAL ABSEN"
           value={total}
           icon={CalendarDays}
+          color="slate"
         />
 
         <Stat
@@ -81,18 +84,25 @@ export function AttendanceStats({ attendances }: Props) {
           color="red"
         />
 
-        {/* PERCENT CARD */}
-        <Card className="p-4 bg-gradient-to-br from-indigo-600 to-blue-700 text-white shadow-lg border-none">
-          <div className="text-[10px] mb-1 opacity-90 font-bold uppercase tracking-wider">
-            Kehadiran
+        {/* PERCENT CARD (BIRU KAI) */}
+        <Card className="p-5 bg-[#3b41e3] text-white shadow-md border-none flex flex-col justify-between rounded-2xl relative overflow-hidden">
+          <div>
+            <div className="text-[10px] opacity-80 font-bold uppercase tracking-[0.1em]">
+              KEHADIRAN
+            </div>
+            <div className="text-4xl font-black mt-1">
+              {percentage}%
+            </div>
           </div>
-          <div className="text-3xl font-black">
-            {percentage}%
+          
+          <div className="mt-4">
+             <div className="h-1.5 w-full bg-white/20 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-white transition-all duration-500" 
+                  style={{ width: `${percentage}%` }}
+                />
+             </div>
           </div>
-          <Progress
-            value={percentage}
-            className="h-1.5 mt-3 bg-white/20"
-          />
         </Card>
       </div>
     </div>
@@ -107,27 +117,28 @@ function Stat({
   color = "slate",
 }: StatProps) {
   const colorMap: Record<StatColor, string> = {
-    green: "text-green-600 bg-green-50",
+    green: "text-green-500 bg-green-50",
     amber: "text-amber-500 bg-amber-50",
-    red: "text-red-600 bg-red-50",
-    slate: "text-slate-600 bg-slate-50",
+    red: "text-red-500 bg-red-50",
+    slate: "text-slate-400 bg-slate-50",
   };
 
   const [textColor, bgColor] = colorMap[color].split(" ");
 
   return (
-    <Card className="p-4 shadow-sm border-slate-100 flex flex-col justify-between">
+    <Card className="p-5 shadow-[0_2px_15px_rgba(0,0,0,0.03)] border-none rounded-2xl flex flex-col justify-between bg-white">
+      {/* Icon Bulat */}
       <div
-        className={`w-8 h-8 rounded-lg flex items-center justify-center ${bgColor}`}
+        className={`w-10 h-10 rounded-full flex items-center justify-center ${bgColor}`}
       >
         <Icon className={`w-5 h-5 ${textColor}`} />
       </div>
 
-      <div className="mt-3">
-        <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+      <div className="mt-5">
+        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
           {label}
         </div>
-        <div className="text-2xl font-black text-slate-800">
+        <div className="text-3xl font-black text-slate-800">
           {value}
         </div>
       </div>

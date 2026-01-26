@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Calendar,
   Download,
   TrendingUp,
   CheckCircle2,
   Clock,
+  CalendarOff,
 } from "lucide-react";
 
 import { Card } from "../ui/card";
@@ -32,7 +32,7 @@ type Attendance = {
   jam_keluar: string | null;
   telat_menit: number;
   pulang_awal_menit: number;
-  status: "hadir" | "izin" | "alpa";
+  status: "hadir" | "izin" | "libur" | "alpa";
 };
 
 type RecapRow = {
@@ -40,6 +40,7 @@ type RecapRow = {
   day: string;
   hadir: number;
   izin: number;
+  libur: number;
   alpa: number;
   percentage: string;
 };
@@ -71,7 +72,7 @@ export function AttendanceReports() {
   const [rows, setRows] = useState<RecapRow[]>([]);
   const [rawData, setRawData] = useState<Attendance[]>([]);
   const [totalInterns, setTotalInterns] = useState(0);
-  const [month, setMonth] = useState<string>("");
+  const [month, setMonth] = useState("");
 
   useEffect(() => {
     loadData();
@@ -123,9 +124,13 @@ export function AttendanceReports() {
       ([date, list]) => {
         const hadir = list.filter(l => l.status === "hadir").length;
         const izin = list.filter(l => l.status === "izin").length;
-        const alpa = totalInterns - hadir - izin;
+        const libur = list.filter(l => l.status === "libur").length;
+        const alpa = Math.max(
+          totalInterns - hadir - izin - libur,
+          0
+        );
 
-        const total = hadir + izin + alpa;
+        const total = hadir + izin + libur + alpa;
         const percentage =
           total === 0 ? "—" : `${((hadir / total) * 100).toFixed(1)}%`;
 
@@ -136,6 +141,7 @@ export function AttendanceReports() {
           }),
           hadir,
           izin,
+          libur,
           alpa,
           percentage,
         };
@@ -154,16 +160,18 @@ export function AttendanceReports() {
 
     const hadir = filtered.filter(d => d.status === "hadir").length;
     const izin = filtered.filter(d => d.status === "izin").length;
-    const alpa = totalInterns * rows.length - hadir - izin;
+    const libur = filtered.filter(d => d.status === "libur").length;
+    const alpa =
+      totalInterns * rows.length - hadir - izin - libur;
 
-    const total = hadir + izin + alpa;
+    const total = hadir + izin + libur + alpa;
     const avg =
       total === 0 ? 0 : Number(((hadir / total) * 100).toFixed(1));
 
-    return { hadir, izin, alpa, avg };
+    return { hadir, izin, libur, alpa, avg };
   }, [rawData, rows, month, totalInterns]);
 
-  /* ================= CSV DETAIL ================= */
+  /* ================= CSV ================= */
   function downloadCSV() {
     const filtered = month
       ? rawData.filter(d => getMonthKey(d.tanggal) === month)
@@ -175,8 +183,6 @@ export function AttendanceReports() {
       "Shift",
       "Jam Masuk",
       "Jam Keluar",
-      "Terlambat (menit)",
-      "Pulang Awal (menit)",
       "Status",
     ];
 
@@ -187,38 +193,33 @@ export function AttendanceReports() {
         d.shift,
         d.jam_masuk ?? "-",
         d.jam_keluar ?? "-",
-        d.telat_menit > 0 ? d.telat_menit : "-",
-        d.pulang_awal_menit > 0 ? d.pulang_awal_menit : "-",
         d.status,
       ].join(",")
     );
 
     const csv = [header.join(","), ...content].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
 
     const a = document.createElement("a");
-    a.href = url;
-    a.download = "laporan-absensi-detail.csv";
+    a.href = URL.createObjectURL(blob);
+    a.download = "laporan-absensi.csv";
     a.click();
-    URL.revokeObjectURL(url);
   }
 
-  /* ================= UI ================= */
   const months = Array.from(
     new Set(rawData.map(d => getMonthKey(d.tanggal)))
   ).sort().reverse();
 
+  /* ================= UI ================= */
   return (
     <div className="space-y-6">
-      {/* HEADER */}
       <div>
         <h2 className="text-2xl font-bold">Laporan Absensi</h2>
         <p className="text-slate-600">Rekap kehadiran peserta magang</p>
       </div>
 
       {/* SUMMARY */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="p-6 border-l-4 border-green-500">
           <TrendingUp /> <b>{summary.avg}%</b> Rata-rata Hadir
         </Card>
@@ -227,6 +228,9 @@ export function AttendanceReports() {
         </Card>
         <Card className="p-6 border-l-4 border-amber-500">
           <Clock /> <b>{summary.izin}</b> Izin
+        </Card>
+        <Card className="p-6 border-l-4 border-slate-500">
+          <CalendarOff /> <b>{summary.libur}</b> Libur
         </Card>
       </div>
 
@@ -260,33 +264,21 @@ export function AttendanceReports() {
               <TableHead>Hari</TableHead>
               <TableHead>Hadir</TableHead>
               <TableHead>Izin</TableHead>
+              <TableHead>Libur</TableHead>
               <TableHead>Alpa</TableHead>
-              <TableHead>Persentase</TableHead>
+              <TableHead>%</TableHead>
             </TableRow>
           </TableHeader>
 
           <TableBody>
-            {rows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center">
-                  Tidak ada data
-                </TableCell>
-              </TableRow>
-            )}
-
             {rows.map((r, i) => (
               <TableRow key={i}>
                 <TableCell>{formatDate(r.date)}</TableCell>
                 <TableCell>{r.day}</TableCell>
-                <TableCell>
-                  <Badge className="bg-green-100">{r.hadir}</Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge className="bg-amber-100">{r.izin}</Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge className="bg-red-100">{r.alpa}</Badge>
-                </TableCell>
+                <TableCell><Badge className="bg-blue-500">{r.hadir}</Badge></TableCell>
+                <TableCell><Badge className="bg-amber-500">{r.izin}</Badge></TableCell>
+                <TableCell><Badge className="bg-slate-500">{r.libur}</Badge></TableCell>
+                <TableCell><Badge className="bg-red-500">{r.alpa}</Badge></TableCell>
                 <TableCell>{r.percentage}</TableCell>
               </TableRow>
             ))}

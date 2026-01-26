@@ -9,61 +9,111 @@ const PORT = 5001;
 app.use(cors());
 app.use(express.json());
 
-app.use((req, res, next) => {
+app.use((_, res, next) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
   next();
 });
 
 /* ================= ROOT ================= */
 app.get("/", (_, res) => {
-  res.send("Backend Absensi Shift Ready 🚀");
+  res.send("Backend Absensi Shift Ready 🚀 (WIB)");
 });
 
 /* ================= SHIFT CONFIG ================= */
 const SHIFTS = {
   shift1: { start: "07:30:00", end: "13:30:00" },
   shift2: { start: "12:30:00", end: "18:30:00" },
-  piket:  { start: "08:00:00", end: "16:00:00" },
+  piket: { start: "08:00:00", end: "16:00:00" },
 };
 
-/* ================= HELPERS ================= */
-function timeToMinutes(time) {
-  const [h, m] = time.split(":").map(Number);
+/* ================= HELPERS (WIB) ================= */
+const nowWIB = () =>
+  new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" })
+  );
+
+const today = () => {
+  const d = nowWIB();
+  return d.toISOString().slice(0, 10);
+};
+
+const nowTime = () => {
+  const d = nowWIB();
+  return d.toTimeString().slice(0, 8);
+};
+
+const timeToMinutes = (t) => {
+  const [h, m] = t.split(":").map(Number);
   return h * 60 + m;
-}
+};
 
-function getToday() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function getCurrentTime() {
-  return new Date().toTimeString().slice(0, 8);
-}
+const isWeekend = () => {
+  const day = nowWIB().getDay(); // 0 = Minggu, 6 = Sabtu
+  return day === 0 || day === 6;
+};
 
 /* ================= INTERNS ================= */
+
+// GET semua peserta
 app.get("/api/interns", async (_, res) => {
-  const [rows] = await db.query(
-    "SELECT id, name, school FROM interns ORDER BY id DESC"
+  try {
+    const [rows] = await db.query(
+      "SELECT id, name, school FROM interns ORDER BY id DESC"
+    );
+    res.json(rows);
+  } catch {
+    res.status(500).json({ message: "Gagal mengambil data peserta" });
+  }
+});
+
+// POST tambah peserta
+app.post("/api/interns", async (req, res) => {
+  const { name, school } = req.body;
+
+  if (!name || !school) {
+    return res.status(400).json({ message: "Nama & sekolah wajib diisi" });
+  }
+
+  const [result] = await db.query(
+    "INSERT INTO interns (name, school) VALUES (?, ?)",
+    [name, school]
   );
-  res.json(rows);
+
+  res.json({
+    id: result.insertId,
+    name,
+    school,
+  });
+});
+
+// DELETE peserta
+app.delete("/api/interns/:id", async (req, res) => {
+  await db.query("DELETE FROM interns WHERE id = ?", [req.params.id]);
+  res.json({ message: "Peserta berhasil dihapus" });
 });
 
 /* ================= ATTENDANCE ================= */
 
-/* ===== TODAY ===== */
+// TODAY
 app.get("/api/attendance/today/:internId", async (req, res) => {
   const [[row]] = await db.query(
     "SELECT * FROM attendance WHERE intern_id = ? AND tanggal = ?",
-    [req.params.internId, getToday()]
+    [req.params.internId, today()]
   );
   res.json(row || null);
 });
 
-/* ===== HISTORY ===== */
+// HISTORY
 app.get("/api/attendance/history/:internId", async (req, res) => {
   const [rows] = await db.query(
-    `SELECT tanggal, shift, jam_masuk, telat_menit,
-            jam_keluar, pulang_awal_menit, status
+    `SELECT 
+        tanggal,
+        shift,
+        jam_masuk,
+        jam_keluar,
+        telat_menit,
+        pulang_awal_menit,
+        status
      FROM attendance
      WHERE intern_id = ?
      ORDER BY tanggal DESC`,
@@ -75,128 +125,140 @@ app.get("/api/attendance/history/:internId", async (req, res) => {
 /* ================= CHECK IN ================= */
 app.post("/api/attendance/checkin", async (req, res) => {
   const { intern_id, shift } = req.body;
-  const today = getToday();
-  const now = getCurrentTime();
 
-  if (!intern_id || !SHIFTS[shift]) {
-    return res.status(400).json({ message: "Data tidak valid" });
+  if (!intern_id || !shift) {
+    return res.status(400).json({ message: "Data tidak lengkap" });
+  }
+
+  const validShifts = ["shift1", "shift2", "piket", "libur", "izin"];
+  if (!validShifts.includes(shift)) {
+    return res.status(400).json({ message: "Shift tidak valid" });
   }
 
   const [[exist]] = await db.query(
-    "SELECT status FROM attendance WHERE intern_id = ? AND tanggal = ?",
-    [intern_id, today]
+    "SELECT id FROM attendance WHERE intern_id = ? AND tanggal = ?",
+    [intern_id, today()]
   );
-
   if (exist) {
-    return res.status(409).json({
-      message: `Sudah ${exist.status} hari ini`,
-    });
+    return res.status(409).json({ message: "Absensi hari ini sudah ada" });
   }
 
+  const now = nowTime();
+
+  // IZIN / LIBUR MANUAL
+  if (shift === "libur" || shift === "izin") {
+    await db.query(
+      `INSERT INTO attendance
+       (intern_id, tanggal, shift, jam_masuk, jam_keluar, telat_menit, pulang_awal_menit, status)
+       VALUES (?, ?, ?, ?, ?, 0, 0, ?)`,
+      [intern_id, today(), shift, now, now, shift]
+    );
+
+    return res.json({ message: `${shift} berhasil dicatat` });
+  }
+
+  // HADIR
   const nowMin = timeToMinutes(now);
   const startMin = timeToMinutes(SHIFTS[shift].start);
   const endMin = timeToMinutes(SHIFTS[shift].end);
 
-  let telat = 0;
-  if (nowMin > startMin) {
-    telat = Math.min(nowMin - startMin, endMin - startMin);
-  }
+  const telat =
+    nowMin > startMin
+      ? Math.min(nowMin - startMin, endMin - startMin)
+      : 0;
 
   await db.query(
     `INSERT INTO attendance
      (intern_id, tanggal, shift, jam_masuk, telat_menit, status)
      VALUES (?, ?, ?, ?, ?, 'hadir')`,
-    [intern_id, today, shift, now, telat]
+    [intern_id, today(), shift, now, telat]
   );
 
-  res.json({ message: "Check in berhasil" });
+  res.json({ message: "Check-in berhasil" });
 });
 
 /* ================= CHECK OUT ================= */
 app.post("/api/attendance/checkout", async (req, res) => {
   const { intern_id } = req.body;
-  const today = getToday();
-  const now = getCurrentTime();
 
   const [[att]] = await db.query(
-    "SELECT * FROM attendance WHERE intern_id = ? AND tanggal = ?",
-    [intern_id, today]
+    `SELECT * FROM attendance
+     WHERE intern_id = ?
+       AND tanggal = ?
+       AND status = 'hadir'
+       AND jam_keluar IS NULL`,
+    [intern_id, today()]
   );
 
-  if (!att || att.jam_keluar) {
-    return res.status(400).json({ message: "Tidak valid" });
+  if (!att) {
+    return res.status(400).json({ message: "Check-out tidak valid" });
   }
 
-  const endMin = timeToMinutes(SHIFTS[att.shift].end);
+  const now = nowTime();
   const nowMin = timeToMinutes(now);
+  const endMin = timeToMinutes(SHIFTS[att.shift].end);
 
-  const jamKeluar = nowMin > endMin ? SHIFTS[att.shift].end : now;
   const pulangAwal = nowMin < endMin ? endMin - nowMin : 0;
 
   await db.query(
     `UPDATE attendance
      SET jam_keluar = ?, pulang_awal_menit = ?
      WHERE id = ?`,
-    [jamKeluar, pulangAwal, att.id]
+    [now, pulangAwal, att.id]
   );
 
-  res.json({ message: "Check out berhasil" });
+  res.json({ message: "Check-out berhasil" });
 });
 
-/* ================= IZIN ================= */
-app.post("/api/attendance/izin", async (req, res) => {
-  const { intern_id, shift } = req.body;
-  const today = getToday();
+/* ================= AUTO ALPA / LIBUR (WIB) ================= */
+cron.schedule(
+  "31 18 * * *",
+  async () => {
+    const [interns] = await db.query("SELECT id FROM interns");
 
-  const [[exist]] = await db.query(
-    "SELECT id FROM attendance WHERE intern_id = ? AND tanggal = ?",
-    [intern_id, today]
-  );
+    // WEEKEND → LIBUR
+    if (isWeekend()) {
+      for (const i of interns) {
+        const [[exist]] = await db.query(
+          "SELECT id FROM attendance WHERE intern_id = ? AND tanggal = ?",
+          [i.id, today()]
+        );
+        if (exist) continue;
 
-  if (exist) {
-    return res.status(409).json({ message: "Sudah ada status hari ini" });
+        await db.query(
+          `INSERT INTO attendance (intern_id, tanggal, shift, status)
+           VALUES (?, ?, 'libur', 'libur')`,
+          [i.id, today()]
+        );
+      }
+
+      console.log("✅ Auto LIBUR (WIB)");
+      return;
+    }
+
+    // WEEKDAY → ALPA
+    for (const i of interns) {
+      const [[exist]] = await db.query(
+        "SELECT id FROM attendance WHERE intern_id = ? AND tanggal = ?",
+        [i.id, today()]
+      );
+      if (exist) continue;
+
+      await db.query(
+        `INSERT INTO attendance (intern_id, tanggal, shift, status)
+         VALUES (?, ?, 'shift2', 'alpa')`,
+        [i.id, today()]
+      );
+    }
+
+    console.log("✅ Auto ALPA (WIB)");
+  },
+  {
+    timezone: "Asia/Jakarta",
   }
-
-  await db.query(
-    `INSERT INTO attendance (intern_id, tanggal, shift, status)
-     VALUES (?, ?, ?, 'izin')`,
-    [intern_id, today, shift]
-  );
-
-  res.json({ message: "Izin berhasil" });
-});
-
-/* ================= AUTO ALPA (GLOBAL 18:31) ================= */
-async function autoAlpa() {
-  const today = getToday();
-  const [interns] = await db.query("SELECT id FROM interns");
-
-  for (const intern of interns) {
-    const [[exist]] = await db.query(
-      "SELECT id FROM attendance WHERE intern_id = ? AND tanggal = ?",
-      [intern.id, today]
-    );
-
-    if (exist) continue;
-
-    await db.query(
-      `INSERT INTO attendance (intern_id, tanggal, shift, status)
-       VALUES (?, ?, 'shift2', 'alpa')`,
-      [intern.id, today]
-    );
-
-    console.log(`❌ AUTO ALPA → intern ${intern.id}`);
-  }
-  autoAlpa(); // 🔥 TEST ONLY
-}
-
-
-cron.schedule("31 18 * * *", () => {
-  autoAlpa();
-});
-
+);
 
 /* ================= SERVER ================= */
 app.listen(PORT, () => {
-  console.log(`🚀 Backend running http://localhost:${PORT}`);
+  console.log(`🚀 Backend running http://localhost:${PORT} (WIB)`);
 });

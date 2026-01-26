@@ -3,12 +3,21 @@
 ===================================================== */
 
 /**
- * 🔑 HARUS SAMA DENGAN BACKEND (index.js)
- * SHIFTS = { shift1, shift2, piket }
+ * 🔑 HARUS SAMA DENGAN BACKEND
+ * shift1 | shift2 | piket | libur | izin
  */
-export type ShiftType = "shift1" | "shift2" | "piket";
+export type ShiftType =
+  | "shift1"
+  | "shift2"
+  | "piket"
+  | "libur"
+  | "izin";
 
-export type AttendanceStatus = "hadir" | "izin" | "alpa";
+export type AttendanceStatus =
+  | "hadir"
+  | "libur"
+  | "izin"
+  | "alpa";
 
 export interface TodayAttendance {
   id: number;
@@ -26,8 +35,8 @@ export interface AttendanceHistory {
   tanggal: string;
   shift: ShiftType;
   jam_masuk: string | null;
-  telat_menit: number;
   jam_keluar: string | null;
+  telat_menit: number;
   pulang_awal_menit: number;
   status: AttendanceStatus;
 }
@@ -36,7 +45,7 @@ export interface AttendanceHistory {
    BASE CONFIG
 ===================================================== */
 
-const BASE_URL = "http://localhost:5001/api";
+const BASE_URL = "http://localhost:5001/api/attendance";
 
 const NO_CACHE_HEADERS = {
   "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -52,57 +61,52 @@ export async function getTodayAttendance(
   internId: number
 ): Promise<TodayAttendance | null> {
   const res = await fetch(
-    `${BASE_URL}/attendance/today/${internId}?t=${Date.now()}`,
+    `${BASE_URL}/today/${internId}?t=${Date.now()}`,
     { headers: NO_CACHE_HEADERS }
   );
 
-  if (!res.ok) {
-    throw new Error("Gagal mengambil status absensi hari ini");
-  }
-
-  const data = await res.json();
-  return data ?? null;
+  if (!res.ok) return null;
+  return res.json();
 }
 
-/* ================= CHECK IN ================= */
-export async function checkIn(
-  intern_id: number,
-  shift: ShiftType
-) {
-  const res = await fetch(`${BASE_URL}/attendance/checkin`, {
+/* ================= CHECK IN / LIBUR / IZIN ================= */
+export async function checkInAttendance(payload: {
+  intern_id: number;
+  shift: ShiftType;
+}) {
+  const res = await fetch(`${BASE_URL}/checkin`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...NO_CACHE_HEADERS,
     },
-    body: JSON.stringify({
-      intern_id,
-      shift, // ⬅️ shift1 | shift2 | piket
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(err.message || "Gagal melakukan check in");
+    throw new Error(err.message || "Gagal melakukan absensi");
   }
 
   return res.json();
 }
 
-/* ================= CHECK OUT ================= */
-export async function checkOut(intern_id: number) {
-  const res = await fetch(`${BASE_URL}/attendance/checkout`, {
+/* ================= CHECK OUT (HANYA SHIFT) ================= */
+export async function checkOutAttendance(payload: {
+  intern_id: number;
+}) {
+  const res = await fetch(`${BASE_URL}/checkout`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...NO_CACHE_HEADERS,
     },
-    body: JSON.stringify({ intern_id }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(err.message || "Gagal melakukan check out");
+    throw new Error(err.message || "Gagal melakukan check-out");
   }
 
   return res.json();
@@ -113,37 +117,12 @@ export async function getAttendanceHistory(
   internId: number
 ): Promise<AttendanceHistory[]> {
   const res = await fetch(
-    `${BASE_URL}/attendance/history/${internId}?t=${Date.now()}`,
+    `${BASE_URL}/history/${internId}?t=${Date.now()}`,
     { headers: NO_CACHE_HEADERS }
   );
 
   if (!res.ok) {
     throw new Error("Gagal mengambil riwayat absensi");
-  }
-
-  return res.json();
-}
-
-/* ================= IZIN ================= */
-export async function izin(
-  intern_id: number,
-  shift: ShiftType
-) {
-  const res = await fetch(`${BASE_URL}/attendance/izin`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...NO_CACHE_HEADERS,
-    },
-    body: JSON.stringify({
-      intern_id,
-      shift, // ⬅️ HARUS shift1 | shift2 | piket
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.message || "Gagal mengajukan izin");
   }
 
   return res.json();
