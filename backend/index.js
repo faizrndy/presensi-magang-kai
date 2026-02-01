@@ -26,7 +26,7 @@ const SHIFTS = {
   piket: { start: "08:00:00", end: "16:00:00" },
 };
 
-/* ================= HELPERS (WIB) ================= */
+/* ================= HELPERS (WIB – ANTI TZ BUG) ================= */
 const nowWIB = () =>
   new Date(
     new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" })
@@ -34,15 +34,11 @@ const nowWIB = () =>
 
 const today = () => {
   const d = nowWIB();
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`; // YYYY-MM-DD
 };
-
-const yesterday = () => {
-  const d = nowWIB();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
-};
-
 
 const nowTime = () => {
   const d = nowWIB();
@@ -54,14 +50,7 @@ const timeToMinutes = (t) => {
   return h * 60 + m;
 };
 
-const isWeekend = () => {
-  const day = nowWIB().getDay(); // 0 = Minggu, 6 = Sabtu
-  return day === 0 || day === 6;
-};
-
 /* ================= INTERNS ================= */
-
-// GET semua peserta
 app.get("/api/interns", async (_, res) => {
   try {
     const [rows] = await db.query(
@@ -73,7 +62,6 @@ app.get("/api/interns", async (_, res) => {
   }
 });
 
-// POST tambah peserta
 app.post("/api/interns", async (req, res) => {
   const { name, school } = req.body;
 
@@ -93,7 +81,6 @@ app.post("/api/interns", async (req, res) => {
   });
 });
 
-// DELETE peserta
 app.delete("/api/interns/:id", async (req, res) => {
   await db.query("DELETE FROM interns WHERE id = ?", [req.params.id]);
   res.json({ message: "Peserta berhasil dihapus" });
@@ -101,7 +88,7 @@ app.delete("/api/interns/:id", async (req, res) => {
 
 /* ================= ATTENDANCE ================= */
 
-// TODAY
+// STATUS HARI INI
 app.get("/api/attendance/today/:internId", async (req, res) => {
   const [[row]] = await db.query(
     "SELECT * FROM attendance WHERE intern_id = ? AND tanggal = ?",
@@ -110,7 +97,7 @@ app.get("/api/attendance/today/:internId", async (req, res) => {
   res.json(row || null);
 });
 
-// HISTORY
+// RIWAYAT
 app.get("/api/attendance/history/:internId", async (req, res) => {
   const [rows] = await db.query(
     `SELECT 
@@ -146,6 +133,7 @@ app.post("/api/attendance/checkin", async (req, res) => {
     "SELECT id FROM attendance WHERE intern_id = ? AND tanggal = ?",
     [intern_id, today()]
   );
+
   if (exist) {
     return res.status(409).json({ message: "Absensi hari ini sudah ada" });
   }
@@ -153,17 +141,16 @@ app.post("/api/attendance/checkin", async (req, res) => {
   const now = nowTime();
 
   // IZIN
-if (shift === "izin") {
-  await db.query(
-    `INSERT INTO attendance
-     (intern_id, tanggal, shift, jam_masuk, jam_keluar, telat_menit, pulang_awal_menit, status)
-     VALUES (?, ?, 'izin', ?, ?, 0, 0, 'izin')`,
-    [intern_id, today(), now, now]
-  );
+  if (shift === "izin") {
+    await db.query(
+      `INSERT INTO attendance
+       (intern_id, tanggal, shift, jam_masuk, jam_keluar, telat_menit, pulang_awal_menit, status)
+       VALUES (?, ?, 'izin', ?, ?, 0, 0, 'izin')`,
+      [intern_id, today(), now, now]
+    );
 
-  return res.json({ message: "Izin berhasil dicatat" });
-}
-
+    return res.json({ message: "Izin berhasil dicatat" });
+  }
 
   // HADIR
   const nowMin = timeToMinutes(now);
@@ -218,11 +205,19 @@ app.post("/api/attendance/checkout", async (req, res) => {
   res.json({ message: "Check-out berhasil" });
 });
 
-/* ================= AUTO ALPA / LIBUR (WIB) ================= */
+/* ================= AUTO LIBUR (FIX FINAL) ================= */
+/**
+ * JAM 00:00 WIB
+ * Jika hari BERGANTI dan peserta tidak absen
+ * → catat LIBUR untuk HARI INI (BUKAN kemarin)
+ */
 cron.schedule(
-  "0 0 * * *",
+  "5 0 * * *", // 00:05 WIB
   async () => {
-    const targetDate = yesterday();
+    const d = nowWIB();
+    d.setDate(d.getDate() - 1); // hari yang benar-benar sudah lewat
+    const targetDate = d.toISOString().slice(0, 10);
+
     const [interns] = await db.query("SELECT id FROM interns");
 
     for (const i of interns) {
@@ -240,7 +235,7 @@ cron.schedule(
       );
     }
 
-    console.log(`✅ Auto LIBUR untuk ${targetDate} (00:00 WIB)`);
+    console.log(`✅ Auto LIBUR FIXED untuk ${targetDate}`);
   },
   { timezone: "Asia/Jakarta" }
 );

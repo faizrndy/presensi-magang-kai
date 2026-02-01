@@ -4,7 +4,7 @@
 
 /**
  * 🔑 HARUS SAMA DENGAN BACKEND
- * shift1 | shift2 | piket | libur | izin
+ * shift1 | shift2 | piket | izin
  */
 export type ShiftType =
   | "shift1"
@@ -17,11 +17,10 @@ export type AttendanceStatus =
   | "libur"
   | "izin";
 
-
 export interface TodayAttendance {
   id: number;
   intern_id: number;
-  tanggal: string;
+  tanggal: string; // YYYY-MM-DD (SUDAH DINORMALISASI)
   shift: ShiftType;
   jam_masuk: string | null;
   jam_keluar: string | null;
@@ -31,7 +30,7 @@ export interface TodayAttendance {
 }
 
 export interface AttendanceHistory {
-  tanggal: string;
+  tanggal: string; // YYYY-MM-DD (SUDAH DINORMALISASI)
   shift: ShiftType;
   jam_masuk: string | null;
   jam_keluar: string | null;
@@ -52,6 +51,19 @@ const NO_CACHE_HEADERS = {
 };
 
 /* =====================================================
+   🔥 DATE NORMALIZER (ANTI UTC BUG)
+===================================================== */
+
+function normalizeDate(date: string): string {
+  // backend kirim UTC → kita ubah ke tanggal lokal
+  const d = new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/* =====================================================
    API FUNCTIONS
 ===================================================== */
 
@@ -65,10 +77,16 @@ export async function getTodayAttendance(
   );
 
   if (!res.ok) return null;
-  return res.json();
+
+  const data = await res.json();
+
+  return {
+    ...data,
+    tanggal: normalizeDate(data.tanggal),
+  };
 }
 
-/* ================= CHECK IN / LIBUR / IZIN ================= */
+/* ================= CHECK IN ================= */
 export async function checkInAttendance(payload: {
   intern_id: number;
   shift: ShiftType;
@@ -87,10 +105,15 @@ export async function checkInAttendance(payload: {
     throw new Error(err.message || "Gagal melakukan absensi");
   }
 
-  return res.json();
+  const data = await res.json();
+
+  return {
+    ...data,
+    tanggal: normalizeDate(data.tanggal),
+  };
 }
 
-/* ================= CHECK OUT (HANYA SHIFT) ================= */
+/* ================= CHECK OUT ================= */
 export async function checkOutAttendance(payload: {
   intern_id: number;
 }) {
@@ -108,7 +131,12 @@ export async function checkOutAttendance(payload: {
     throw new Error(err.message || "Gagal melakukan check-out");
   }
 
-  return res.json();
+  const data = await res.json();
+
+  return {
+    ...data,
+    tanggal: normalizeDate(data.tanggal),
+  };
 }
 
 /* ================= RIWAYAT ABSENSI ================= */
@@ -124,5 +152,10 @@ export async function getAttendanceHistory(
     throw new Error("Gagal mengambil riwayat absensi");
   }
 
-  return res.json();
+  const data = await res.json();
+
+  return data.map((item: AttendanceHistory) => ({
+    ...item,
+    tanggal: normalizeDate(item.tanggal),
+  }));
 }

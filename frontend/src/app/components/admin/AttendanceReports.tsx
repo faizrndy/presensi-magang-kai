@@ -26,13 +26,11 @@ import { getAttendanceHistory } from "../../api/attendance.api";
 type Attendance = {
   intern_id: number;
   intern_name: string;
-  tanggal: string;
+  tanggal: string; // YYYY-MM-DD
   shift: string;
   jam_masuk: string | null;
   jam_keluar: string | null;
-  telat_menit: number;
-  pulang_awal_menit: number;
-  status: "hadir" | "izin" | "libur" | "alpa";
+  status: "hadir" | "izin" | "libur";
 };
 
 type RecapRow = {
@@ -41,23 +39,31 @@ type RecapRow = {
   hadir: number;
   izin: number;
   libur: number;
-  alpa: number;
   percentage: string;
 };
 
-/* ================= HELPERS ================= */
+/* ================= DATE HELPERS ================= */
+function parseLocalDate(date: string) {
+  const clean = date.slice(0, 10); // ambil YYYY-MM-DD
+  const [y, m, d] = clean.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+
 function formatDate(date: string) {
-  return new Date(date).toLocaleDateString("id-ID", {
-    year: "numeric",
-    month: "2-digit",
+  return parseLocalDate(date).toLocaleDateString("id-ID", {
     day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   });
 }
 
 function getMonthKey(date: string) {
-  const d = new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const clean = date.slice(0, 10); // ⬅️ PENTING
+  const [y, m] = clean.split("-");
+  return `${y}-${m}`;
 }
+
 
 function monthLabel(key: string) {
   const [y, m] = key.split("-");
@@ -69,48 +75,40 @@ function monthLabel(key: string) {
 
 /* ================= COMPONENT ================= */
 export function AttendanceReports() {
-  const [rows, setRows] = useState<RecapRow[]>([]);
   const [rawData, setRawData] = useState<Attendance[]>([]);
-  const [totalInterns, setTotalInterns] = useState(0);
+  const [rows, setRows] = useState<RecapRow[]>([]);
   const [month, setMonth] = useState("");
 
+  /* ===== LOAD DATA ===== */
   useEffect(() => {
-    loadData();
+    (async () => {
+      const interns = await getInterns();
+      const all: Attendance[] = [];
+
+      for (const intern of interns) {
+        const history = await getAttendanceHistory(intern.id);
+        history.forEach((h: any) => {
+          all.push({
+            intern_id: intern.id,
+            intern_name: intern.name,
+            tanggal: h.tanggal,
+            shift: h.shift,
+            jam_masuk: h.jam_masuk,
+            jam_keluar: h.jam_keluar,
+            status: h.status,
+          });
+        });
+      }
+
+      setRawData(all);
+    })();
   }, []);
 
-  /* ================= LOAD DATA ================= */
-  async function loadData() {
-    const interns = await getInterns();
-    setTotalInterns(interns.length);
-
-    const all: Attendance[] = [];
-
-    for (const intern of interns) {
-      const history = await getAttendanceHistory(intern.id);
-      history.forEach((h: any) => {
-        all.push({
-          intern_id: intern.id,
-          intern_name: intern.name,
-          tanggal: h.tanggal,
-          shift: h.shift,
-          jam_masuk: h.jam_masuk,
-          jam_keluar: h.jam_keluar,
-          telat_menit: h.telat_menit || 0,
-          pulang_awal_menit: h.pulang_awal_menit || 0,
-          status: h.status,
-        });
-      });
-    }
-
-    setRawData(all);
-    buildTable(all);
-  }
-
-  /* ================= BUILD TABLE ================= */
-  function buildTable(data: Attendance[]) {
+  /* ===== BUILD TABLE (INI YANG HILANG SEBELUMNYA) ===== */
+  useEffect(() => {
     const filtered = month
-      ? data.filter(d => getMonthKey(d.tanggal) === month)
-      : data;
+      ? rawData.filter(d => getMonthKey(d.tanggal) === month)
+      : rawData;
 
     const grouped: Record<string, Attendance[]> = {};
 
@@ -125,24 +123,19 @@ export function AttendanceReports() {
         const hadir = list.filter(l => l.status === "hadir").length;
         const izin = list.filter(l => l.status === "izin").length;
         const libur = list.filter(l => l.status === "libur").length;
-        const alpa = Math.max(
-          totalInterns - hadir - izin - libur,
-          0
-        );
 
-        const total = hadir + izin + libur + alpa;
+        const aktif = hadir + izin;
         const percentage =
-          total === 0 ? "—" : `${((hadir / total) * 100).toFixed(1)}%`;
+          aktif === 0 ? "—" : `${((hadir / aktif) * 100).toFixed(1)}%`;
 
         return {
           date,
-          day: new Date(date).toLocaleDateString("id-ID", {
+          day: parseLocalDate(date).toLocaleDateString("id-ID", {
             weekday: "long",
           }),
           hadir,
           izin,
           libur,
-          alpa,
           percentage,
         };
       }
@@ -150,9 +143,9 @@ export function AttendanceReports() {
 
     result.sort((a, b) => b.date.localeCompare(a.date));
     setRows(result);
-  }
+  }, [rawData, month]); // 🔥 WAJIB
 
-  /* ================= SUMMARY ================= */
+  /* ===== SUMMARY ===== */
   const summary = useMemo(() => {
     const filtered = month
       ? rawData.filter(d => getMonthKey(d.tanggal) === month)
@@ -161,64 +154,38 @@ export function AttendanceReports() {
     const hadir = filtered.filter(d => d.status === "hadir").length;
     const izin = filtered.filter(d => d.status === "izin").length;
     const libur = filtered.filter(d => d.status === "libur").length;
-    const alpa =
-      totalInterns * rows.length - hadir - izin - libur;
 
-    const total = hadir + izin + libur + alpa;
-    const avg =
-      total === 0 ? 0 : Number(((hadir / total) * 100).toFixed(1));
+    const aktif = hadir + izin;
+    const avg = aktif === 0 ? 0 : Number(((hadir / aktif) * 100).toFixed(1));
 
-    return { hadir, izin, libur, alpa, avg };
-  }, [rawData, rows, month, totalInterns]);
-
-  /* ================= CSV ================= */
-  function downloadCSV() {
-    const filtered = month
-      ? rawData.filter(d => getMonthKey(d.tanggal) === month)
-      : rawData;
-
-    const header = [
-      "Tanggal",
-      "Nama",
-      "Shift",
-      "Jam Masuk",
-      "Jam Keluar",
-      "Status",
-    ];
-
-    const content = filtered.map(d =>
-      [
-        d.tanggal.slice(0, 10),
-        d.intern_name,
-        d.shift,
-        d.jam_masuk ?? "-",
-        d.jam_keluar ?? "-",
-        d.status,
-      ].join(",")
-    );
-
-    const csv = [header.join(","), ...content].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "laporan-absensi.csv";
-    a.click();
-  }
+    return { hadir, izin, libur, avg };
+  }, [rawData, month]);
 
   const months = Array.from(
     new Set(rawData.map(d => getMonthKey(d.tanggal)))
   ).sort().reverse();
 
+  // 🔥 AUTO PILIH BULAN SEKARANG
+useEffect(() => {
+  if (rawData.length === 0) return;
+
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(
+    now.getMonth() + 1
+  ).padStart(2, "0")}`;
+
+  // kalau bulan sekarang ada di data, set otomatis
+  if (months.includes(currentMonth)) {
+    setMonth(currentMonth);
+  }
+}, [rawData]);
+
+
   /* ================= UI ================= */
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">Laporan Absensi</h2>
-        <p className="text-slate-600">Rekap kehadiran peserta magang</p>
-      </div>
+      <h2 className="text-2xl font-bold">Laporan Absensi</h2>
 
-      {/* SUMMARY */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="p-6 border-l-4 border-green-500">
           <TrendingUp /> <b>{summary.avg}%</b> Rata-rata Hadir
@@ -234,7 +201,6 @@ export function AttendanceReports() {
         </Card>
       </div>
 
-      {/* FILTER */}
       <Card className="p-4 flex gap-4">
         <select
           className="border px-3 py-2 rounded-md"
@@ -249,13 +215,12 @@ export function AttendanceReports() {
           ))}
         </select>
 
-        <Button variant="outline" onClick={downloadCSV}>
+        <Button variant="outline">
           <Download className="w-4 h-4 mr-2" />
           Download CSV
         </Button>
       </Card>
 
-      {/* TABLE */}
       <Card>
         <Table>
           <TableHeader>
@@ -265,11 +230,9 @@ export function AttendanceReports() {
               <TableHead>Hadir</TableHead>
               <TableHead>Izin</TableHead>
               <TableHead>Libur</TableHead>
-              <TableHead>Alpa</TableHead>
               <TableHead>%</TableHead>
             </TableRow>
           </TableHeader>
-
           <TableBody>
             {rows.map((r, i) => (
               <TableRow key={i}>
@@ -278,7 +241,6 @@ export function AttendanceReports() {
                 <TableCell><Badge className="bg-blue-500">{r.hadir}</Badge></TableCell>
                 <TableCell><Badge className="bg-amber-500">{r.izin}</Badge></TableCell>
                 <TableCell><Badge className="bg-slate-500">{r.libur}</Badge></TableCell>
-                <TableCell><Badge className="bg-red-500">{r.alpa}</Badge></TableCell>
                 <TableCell>{r.percentage}</TableCell>
               </TableRow>
             ))}
