@@ -28,7 +28,8 @@ export const SHIFTS = {
 };
 
 export type ShiftKey = keyof typeof SHIFTS;
-export type AttendanceType = ShiftKey | "libur" | "izin";
+export type AttendanceType = ShiftKey | "izin";
+
 
 interface IdentitySectionProps {
   interns: any[];
@@ -119,7 +120,6 @@ export function IdentitySection({
                   ))}
 
                   {/* ===== LIBUR & IZIN ===== */}
-                  <SelectItem value="libur">Libur</SelectItem>
                   <SelectItem value="izin">Izin</SelectItem>
                 </SelectContent>
               </Select>

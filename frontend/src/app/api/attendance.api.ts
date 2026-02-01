@@ -10,14 +10,13 @@ export type ShiftType =
   | "shift1"
   | "shift2"
   | "piket"
-  | "libur"
   | "izin";
 
 export type AttendanceStatus =
   | "hadir"
   | "libur"
-  | "izin"
-  | "alpa";
+  | "izin";
+
 
 export interface TodayAttendance {
   id: number;

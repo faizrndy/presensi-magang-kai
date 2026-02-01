@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   Users,
-  UserX,
   TrendingUp,
   CalendarOff,
   Clock,
@@ -15,7 +14,7 @@ import { getAttendanceHistory } from "../../api/attendance.api";
 /* ================= TYPES ================= */
 type Activity = {
   name: string;
-  status: "hadir" | "izin" | "libur" | "alpa";
+  status: "hadir" | "izin" | "libur";
   shift?: "shift1" | "shift2" | "piket";
   tanggal: string;
   jam_masuk: string | null;
@@ -48,7 +47,14 @@ function shiftLabel(shift?: Activity["shift"]) {
   if (shift === "shift1") return "Shift 1";
   if (shift === "shift2") return "Shift 2";
   if (shift === "piket") return "Piket";
-  return null;
+  return "";
+}
+
+function shiftBadgeStyle(shift?: Activity["shift"]) {
+  if (shift === "shift1") return "bg-blue-100 text-blue-700";
+  if (shift === "shift2") return "bg-purple-100 text-purple-700";
+  if (shift === "piket") return "bg-cyan-100 text-cyan-700";
+  return "bg-slate-100 text-slate-600";
 }
 
 /* ================= COMPONENT ================= */
@@ -57,7 +63,6 @@ export function DashboardOverview() {
   const [hadirHariIni, setHadirHariIni] = useState(0);
   const [izinHariIni, setIzinHariIni] = useState(0);
   const [liburHariIni, setLiburHariIni] = useState(0);
-  const [alpaHariIni, setAlpaHariIni] = useState(0);
   const [activities, setActivities] = useState<Activity[]>([]);
 
   useEffect(() => {
@@ -94,13 +99,9 @@ export function DashboardOverview() {
       });
     }
 
-    const alpa = interns.length - hadir - izin - libur;
-
     setHadirHariIni(hadir);
     setIzinHariIni(izin);
     setLiburHariIni(libur);
-    setAlpaHariIni(alpa);
-
     setActivities(todayActivities.slice(-5).reverse());
   }
 
@@ -108,12 +109,11 @@ export function DashboardOverview() {
   return (
     <div className="space-y-6">
       {/* ===== SUMMARY ===== */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <SummaryCard icon={<Users />} label="Total Peserta" value={totalInterns} />
         <SummaryCard icon={<CheckCircle2 />} label="Hadir" value={hadirHariIni} />
         <SummaryCard icon={<Clock />} label="Izin" value={izinHariIni} />
         <SummaryCard icon={<CalendarOff />} label="Libur" value={liburHariIni} />
-        <SummaryCard icon={<UserX />} label="Alpa" value={alpaHariIni} />
       </div>
 
       {/* ===== ACTIVITY ===== */}
@@ -129,73 +129,65 @@ export function DashboardOverview() {
               Belum ada aktivitas hari ini
             </p>
           ) : (
-            <ul className="space-y-4">
+            <ul className="space-y-3">
               {activities.map((a, i) => (
-                <li key={i} className="border-b pb-3 text-sm">
-                  {/* NAMA */}
-                  <p className="font-medium text-slate-800">
-                    {a.name}
-                  </p>
-
-                  {/* BADGE STATUS */}
-                  <div className="flex gap-2 mt-1">
+                <li
+                  key={i}
+                  className="flex items-start gap-4 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition"
+                >
+                  {/* STATUS BADGE */}
+                  <div>
                     {a.status === "hadir" && (
-                      <>
-                        <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700">
-                          HADIR
-                        </span>
-                        {a.shift && (
-                          <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700">
-                            {shiftLabel(a.shift)}
-                          </span>
-                        )}
-                      </>
+                      <span className="text-xs font-bold px-3 py-1 rounded-full bg-green-100 text-green-700">
+                        HADIR
+                      </span>
                     )}
-
                     {a.status === "izin" && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-700">
+                      <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-700">
                         IZIN
                       </span>
                     )}
-
                     {a.status === "libur" && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                      <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-200 text-slate-700">
                         LIBUR
-                      </span>
-                    )}
-
-                    {a.status === "alpa" && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-700">
-                        ALPA
                       </span>
                     )}
                   </div>
 
-                  {/* DETAIL */}
-                  {a.status === "hadir" && (
-                    <p className="text-slate-600 mt-1">
-                      Masuk {formatTime(a.jam_masuk)} • Pulang{" "}
-                      {formatTime(a.jam_keluar)}
-                    </p>
-                  )}
+                  {/* CONTENT */}
+                  <div className="flex-1">
+                    <p className="font-semibold text-slate-800">{a.name}</p>
 
-                  {a.status === "izin" && (
-                    <p className="text-slate-500 mt-1">
-                      Klik izin {formatTime(a.jam_masuk)}
-                    </p>
-                  )}
+                    {a.status === "hadir" && (
+                      <div className="flex flex-wrap items-center gap-2 mt-1 text-sm">
+                        {a.shift && (
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${shiftBadgeStyle(
+                              a.shift
+                            )}`}
+                          >
+                            {shiftLabel(a.shift)}
+                          </span>
+                        )}
+                        <span className="text-slate-600">
+                          Masuk {formatTime(a.jam_masuk)} • Pulang{" "}
+                          {formatTime(a.jam_keluar)}
+                        </span>
+                      </div>
+                    )}
 
-                  {a.status === "libur" && (
-                    <p className="text-slate-500 mt-1">
-                      Klik libur {formatTime(a.jam_masuk)}
-                    </p>
-                  )}
+                    {a.status === "izin" && (
+                      <p className="text-sm text-slate-500 mt-0.5">
+                        Mengajukan izin pukul {formatTime(a.jam_masuk)}
+                      </p>
+                    )}
 
-                  {a.status === "alpa" && (
-                    <p className="text-red-600 mt-1">
-                      Tidak hadir
-                    </p>
-                  )}
+                    {a.status === "libur" && (
+                      <p className="text-sm text-slate-500 mt-0.5">
+                        Tidak ada absensi (otomatis sistem)
+                      </p>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

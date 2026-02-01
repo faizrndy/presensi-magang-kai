@@ -1,12 +1,11 @@
 import {
   CalendarDays,
+  CalendarOff,
   CheckCircle2,
   Clock,
-  XCircle,
   TrendingUp,
 } from "lucide-react";
 import { Card } from "./ui/card";
-import { Progress } from "./ui/progress";
 import { AttendanceHistory } from "../api/attendance.api";
 
 /* ================= TYPES ================= */
@@ -14,7 +13,7 @@ type Props = {
   attendances: AttendanceHistory[] | null | undefined;
 };
 
-type StatColor = "green" | "amber" | "red" | "slate";
+type StatColor = "green" | "amber" | "slate";
 
 type StatProps = {
   label: string;
@@ -33,15 +32,15 @@ export function AttendanceStats({ attendances }: Props) {
   /* ================= COUNT STATUS ================= */
   const hadir = safeData.filter(a => a.status === "hadir").length;
   const izin = safeData.filter(a => a.status === "izin").length;
-  const alpa = safeData.filter(a => a.status === "alpa").length;
+  const libur = safeData.filter(a => a.status === "libur").length;
 
-  // Total absen di sini biasanya jumlah hari kerja yang sudah berlalu
-  const total = safeData.length;
+  /* ================= TOTAL ================= */
+  const totalAbsen = hadir + izin + libur;
+  const totalAktif = hadir + izin;
 
   /* ================= PERCENTAGE ================= */
-  // Logika: (Hadir / Total) * 100. Jika total 0, maka 0%.
   const percentage =
-    total === 0 ? 0 : Math.round((hadir / total) * 100);
+    totalAktif === 0 ? 0 : Math.round((hadir / totalAktif) * 100);
 
   /* ================= UI ================= */
   return (
@@ -55,10 +54,10 @@ export function AttendanceStats({ attendances }: Props) {
       </div>
 
       {/* GRID STATS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
         <Stat
           label="TOTAL ABSEN"
-          value={total}
+          value={totalAbsen}
           icon={CalendarDays}
           color="slate"
         />
@@ -78,13 +77,13 @@ export function AttendanceStats({ attendances }: Props) {
         />
 
         <Stat
-          label="ALPA"
-          value={alpa}
-          icon={XCircle}
-          color="red"
+          label="LIBUR"
+          value={libur}
+          icon={CalendarOff}
+          color="slate"
         />
 
-        {/* PERCENT CARD (BIRU KAI) */}
+        {/* PERCENT CARD */}
         <Card className="p-5 bg-[#3b41e3] text-white shadow-md border-none flex flex-col justify-between rounded-2xl relative overflow-hidden">
           <div>
             <div className="text-[10px] opacity-80 font-bold uppercase tracking-[0.1em]">
@@ -94,14 +93,14 @@ export function AttendanceStats({ attendances }: Props) {
               {percentage}%
             </div>
           </div>
-          
+
           <div className="mt-4">
-             <div className="h-1.5 w-full bg-white/20 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-white transition-all duration-500" 
-                  style={{ width: `${percentage}%` }}
-                />
-             </div>
+            <div className="h-1.5 w-full bg-white/20 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-white transition-all duration-500"
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
           </div>
         </Card>
       </div>
@@ -119,7 +118,6 @@ function Stat({
   const colorMap: Record<StatColor, string> = {
     green: "text-green-500 bg-green-50",
     amber: "text-amber-500 bg-amber-50",
-    red: "text-red-500 bg-red-50",
     slate: "text-slate-400 bg-slate-50",
   };
 
@@ -127,7 +125,6 @@ function Stat({
 
   return (
     <Card className="p-5 shadow-[0_2px_15px_rgba(0,0,0,0.03)] border-none rounded-2xl flex flex-col justify-between bg-white">
-      {/* Icon Bulat */}
       <div
         className={`w-10 h-10 rounded-full flex items-center justify-center ${bgColor}`}
       >
