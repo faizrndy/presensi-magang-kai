@@ -165,61 +165,142 @@ export function AttendanceReports() {
 
   /* ===== PDF EXPORT ===== */
   async function downloadPDF() {
-    const targets =
-      internId === "all"
-        ? interns
-        : interns.filter(i => i.id === internId);
+  const doc = new jsPDF({
+    unit: "mm",
+    format: "a4",
+  });
 
-    for (const intern of targets) {
-      const data = filteredData.filter(d => d.intern_id === intern.id);
+  const marginX = 20;
+  let cursorY = 25;
 
-      const doc = new jsPDF();
-      doc.setFont("Times", "Normal");
-      doc.setFontSize(12);
+  /* ================= FONT DEFAULT ================= */
+  doc.setFont("Times", "Normal");
+  doc.setFontSize(12);
 
-      const img = new Image();
-      img.src = "/kai.png";
-      await new Promise(r => (img.onload = r));
-      doc.addImage(img, "PNG", 14, 10, 40, 18); // ❌ tidak gepeng
+  /* ================= LOGO ================= */
+  const img = new Image();
+  img.src = "/kai.png";
+  await new Promise(r => (img.onload = r));
+  doc.addImage(img, "PNG", marginX, cursorY, 45, 20);
 
-      doc.setFont("Times", "Bold");
-      doc.setFontSize(14);
-      doc.text("LAPORAN ABSENSI", 105, 20, { align: "center" });
+  /* ================= TITLE ================= */
+  doc.setFont("Times", "Bold");
+  doc.setFontSize(14);
+  doc.text("LAPORAN ABSENSI", 105, cursorY + 30, {
+    align: "center",
+  });
 
-      doc.setFont("Times", "Normal");
-      doc.setFontSize(12);
-      doc.text(`Nama : ${intern.name}`, 14, 40);
-      doc.text(
-        `Periode : ${month ? monthLabel(month) : "Semua Bulan"}`,
-        14,
-        47
-      );
+  cursorY += 45;
 
-      autoTable(doc, {
-        startY: 55,
-        styles: {
-          font: "Times",
-          fontSize: 12,
-        },
-        headStyles: {
-          fillColor: [10, 35, 66], // NAVY
-          textColor: 255,
-        },
-        head: [
-          ["Tanggal", "Status", "Shift", "Jam Masuk", "Jam Keluar"],
-        ],
-        body: data.map(d => [
-          formatDate(d.tanggal),
-          d.status.toUpperCase(),
-          d.shift,
-          d.jam_masuk || "-",
-          d.jam_keluar || "-",
-        ]),
-      });
+  /* ================= INFO ================= */
+  doc.setFont("Times", "Normal");
+  doc.setFontSize(12);
 
-      doc.save(`absensi_${intern.name}.pdf`);
-    }
-  }
+  const labelWidth = 30;
+
+  doc.text("Periode", marginX, cursorY);
+  doc.text(":", marginX + labelWidth, cursorY);
+  doc.text(
+    month ? monthLabel(month) : "Semua Bulan",
+    marginX + labelWidth + 5,
+    cursorY
+  );
+
+  cursorY += 7;
+
+  doc.text("Peserta", marginX, cursorY);
+  doc.text(":", marginX + labelWidth, cursorY);
+  doc.text(
+    internId === "all"
+      ? "Semua Peserta"
+      : interns.find(i => i.id === internId)?.name || "-",
+    marginX + labelWidth + 5,
+    cursorY
+  );
+
+  cursorY += 12;
+
+  /* ================= TABLE ================= */
+  autoTable(doc, {
+    startY: cursorY,
+    styles: {
+      font: "Times",
+      fontSize: 12,
+      lineWidth: 0.3,
+      lineColor: [0, 0, 0],
+      valign: "middle",
+    },
+    headStyles: {
+      fillColor: [10, 35, 66], // NAVY
+      textColor: 255,
+      fontStyle: "bold",
+      halign: "center",
+      lineWidth: 0.3,
+      lineColor: [0, 0, 0],
+    },
+    bodyStyles: {
+      lineWidth: 0.3,
+      lineColor: [0, 0, 0],
+    },
+    columnStyles: {
+      0: { halign: "center" }, // tanggal
+      1: { halign: "left" },   // nama
+      2: { halign: "center" }, // status
+      3: { halign: "center" }, // shift
+      4: { halign: "center" }, // masuk
+      5: { halign: "center" }, // keluar
+      6: { halign: "center" }, // keterangan
+    },
+    head: [
+      [
+        "Tanggal",
+        "Nama",
+        "Status",
+        "Shift",
+        "Jam Masuk",
+        "Jam Keluar",
+        "Keterangan Waktu",
+      ],
+    ],
+    body: filteredData.map(d => {
+      let ket = "-";
+
+      if (d.jam_masuk) {
+        const masuk = new Date(`1970-01-01T${d.jam_masuk}`);
+        const batas =
+          d.shift === "shift1"
+            ? new Date("1970-01-01T07:30:00")
+            : new Date("1970-01-01T13:30:00");
+
+        const diff = Math.floor(
+          (masuk.getTime() - batas.getTime()) / 60000
+        );
+
+        ket = diff > 0 ? `TERLAMBAT ${diff} MENIT` : "TEPAT WAKTU";
+      }
+
+      return [
+        formatDate(d.tanggal),
+        d.intern_name,
+        d.status.toUpperCase(),
+        d.shift,
+        d.jam_masuk || "-",
+        d.jam_keluar || "-",
+        ket,
+      ];
+    }),
+  });
+
+  /* ================= SAVE ================= */
+  doc.save(
+    internId === "all"
+      ? "laporan_absensi_semua_peserta.pdf"
+      : `laporan_absensi_${interns.find(i => i.id === internId)?.name}.pdf`
+  );
+}
+
+
+
 
   /* ================= UI ================= */
   return (
