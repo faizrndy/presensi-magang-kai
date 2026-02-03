@@ -22,11 +22,19 @@ import {
 import { getInterns } from "../../api/intern.api";
 import { getAttendanceHistory } from "../../api/attendance.api";
 
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+
 /* ================= TYPES ================= */
+type Intern = {
+  id: number;
+  name: string;
+};
+
 type Attendance = {
   intern_id: number;
   intern_name: string;
-  tanggal: string; // YYYY-MM-DD
+  tanggal: string;
   shift: string;
   jam_masuk: string | null;
   jam_keluar: string | null;
@@ -42,28 +50,19 @@ type RecapRow = {
   percentage: string;
 };
 
-/* ================= DATE HELPERS ================= */
+/* ================= HELPERS ================= */
 function parseLocalDate(date: string) {
-  const clean = date.slice(0, 10); // ambil YYYY-MM-DD
-  const [y, m, d] = clean.split("-").map(Number);
+  const [y, m, d] = date.slice(0, 10).split("-").map(Number);
   return new Date(y, m - 1, d);
 }
 
-
 function formatDate(date: string) {
-  return parseLocalDate(date).toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  return parseLocalDate(date).toLocaleDateString("id-ID");
 }
 
 function getMonthKey(date: string) {
-  const clean = date.slice(0, 10); // ⬅️ PENTING
-  const [y, m] = clean.split("-");
-  return `${y}-${m}`;
+  return date.slice(0, 7);
 }
-
 
 function monthLabel(key: string) {
   const [y, m] = key.split("-");
@@ -75,17 +74,20 @@ function monthLabel(key: string) {
 
 /* ================= COMPONENT ================= */
 export function AttendanceReports() {
+  const [interns, setInterns] = useState<Intern[]>([]);
   const [rawData, setRawData] = useState<Attendance[]>([]);
   const [rows, setRows] = useState<RecapRow[]>([]);
   const [month, setMonth] = useState("");
+  const [internId, setInternId] = useState<number | "all">("all");
 
   /* ===== LOAD DATA ===== */
   useEffect(() => {
     (async () => {
-      const interns = await getInterns();
-      const all: Attendance[] = [];
+      const internList = await getInterns();
+      setInterns(internList);
 
-      for (const intern of interns) {
+      const all: Attendance[] = [];
+      for (const intern of internList) {
         const history = await getAttendanceHistory(intern.id);
         history.forEach((h: any) => {
           all.push({
@@ -99,20 +101,24 @@ export function AttendanceReports() {
           });
         });
       }
-
       setRawData(all);
     })();
   }, []);
 
-  /* ===== BUILD TABLE (INI YANG HILANG SEBELUMNYA) ===== */
+  /* ===== FILTER ===== */
+  const filteredData = useMemo(() => {
+    return rawData.filter(d => {
+      const byMonth = month ? getMonthKey(d.tanggal) === month : true;
+      const byIntern =
+        internId === "all" ? true : d.intern_id === internId;
+      return byMonth && byIntern;
+    });
+  }, [rawData, month, internId]);
+
+  /* ===== TABLE ===== */
   useEffect(() => {
-    const filtered = month
-      ? rawData.filter(d => getMonthKey(d.tanggal) === month)
-      : rawData;
-
     const grouped: Record<string, Attendance[]> = {};
-
-    filtered.forEach(d => {
+    filteredData.forEach(d => {
       const key = d.tanggal.slice(0, 10);
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(d);
@@ -123,10 +129,7 @@ export function AttendanceReports() {
         const hadir = list.filter(l => l.status === "hadir").length;
         const izin = list.filter(l => l.status === "izin").length;
         const libur = list.filter(l => l.status === "libur").length;
-
         const aktif = hadir + izin;
-        const percentage =
-          aktif === 0 ? "—" : `${((hadir / aktif) * 100).toFixed(1)}%`;
 
         return {
           date,
@@ -136,68 +139,117 @@ export function AttendanceReports() {
           hadir,
           izin,
           libur,
-          percentage,
+          percentage:
+            aktif === 0 ? "—" : `${((hadir / aktif) * 100).toFixed(1)}%`,
         };
       }
     );
 
     result.sort((a, b) => b.date.localeCompare(a.date));
     setRows(result);
-  }, [rawData, month]); // 🔥 WAJIB
+  }, [filteredData]);
 
   /* ===== SUMMARY ===== */
   const summary = useMemo(() => {
-    const filtered = month
-      ? rawData.filter(d => getMonthKey(d.tanggal) === month)
-      : rawData;
-
-    const hadir = filtered.filter(d => d.status === "hadir").length;
-    const izin = filtered.filter(d => d.status === "izin").length;
-    const libur = filtered.filter(d => d.status === "libur").length;
-
+    const hadir = filteredData.filter(d => d.status === "hadir").length;
+    const izin = filteredData.filter(d => d.status === "izin").length;
+    const libur = filteredData.filter(d => d.status === "libur").length;
     const aktif = hadir + izin;
     const avg = aktif === 0 ? 0 : Number(((hadir / aktif) * 100).toFixed(1));
-
     return { hadir, izin, libur, avg };
-  }, [rawData, month]);
+  }, [filteredData]);
 
   const months = Array.from(
     new Set(rawData.map(d => getMonthKey(d.tanggal)))
   ).sort().reverse();
 
-  // 🔥 AUTO PILIH BULAN SEKARANG
-useEffect(() => {
-  if (rawData.length === 0) return;
+  /* ===== PDF EXPORT ===== */
+  async function downloadPDF() {
+    const targets =
+      internId === "all"
+        ? interns
+        : interns.filter(i => i.id === internId);
 
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(
-    now.getMonth() + 1
-  ).padStart(2, "0")}`;
+    for (const intern of targets) {
+      const data = filteredData.filter(d => d.intern_id === intern.id);
 
-  // kalau bulan sekarang ada di data, set otomatis
-  if (months.includes(currentMonth)) {
-    setMonth(currentMonth);
+      const doc = new jsPDF();
+      doc.setFont("Times", "Normal");
+      doc.setFontSize(12);
+
+      const img = new Image();
+      img.src = "/kai.png";
+      await new Promise(r => (img.onload = r));
+      doc.addImage(img, "PNG", 14, 10, 40, 18); // ❌ tidak gepeng
+
+      doc.setFont("Times", "Bold");
+      doc.setFontSize(14);
+      doc.text("LAPORAN ABSENSI", 105, 20, { align: "center" });
+
+      doc.setFont("Times", "Normal");
+      doc.setFontSize(12);
+      doc.text(`Nama : ${intern.name}`, 14, 40);
+      doc.text(
+        `Periode : ${month ? monthLabel(month) : "Semua Bulan"}`,
+        14,
+        47
+      );
+
+      autoTable(doc, {
+        startY: 55,
+        styles: {
+          font: "Times",
+          fontSize: 12,
+        },
+        headStyles: {
+          fillColor: [10, 35, 66], // NAVY
+          textColor: 255,
+        },
+        head: [
+          ["Tanggal", "Status", "Shift", "Jam Masuk", "Jam Keluar"],
+        ],
+        body: data.map(d => [
+          formatDate(d.tanggal),
+          d.status.toUpperCase(),
+          d.shift,
+          d.jam_masuk || "-",
+          d.jam_keluar || "-",
+        ]),
+      });
+
+      doc.save(`absensi_${intern.name}.pdf`);
+    }
   }
-}, [rawData]);
-
 
   /* ================= UI ================= */
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">Laporan Absensi</h2>
 
+      {/* SUMMARY CARD — WARNA JANGAN DIUBAH */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="p-6 border-l-4 border-green-500">
-          <TrendingUp /> <b>{summary.avg}%</b> Rata-rata Hadir
+        <Card className="p-6 border-2 border-green-500">
+          <TrendingUp className="mb-2" />
+          <b className="text-xl">{summary.avg}%</b>
+          <p>Rata-rata Hadir</p>
         </Card>
-        <Card className="p-6 border-l-4 border-blue-500">
-          <CheckCircle2 /> <b>{summary.hadir}</b> Hadir
+
+        <Card className="p-6 border-2 border-blue-500">
+          <CheckCircle2 className="mb-2" />
+          <b className="text-xl">{summary.hadir}</b>
+          <p>Hadir</p>
         </Card>
-        <Card className="p-6 border-l-4 border-amber-500">
-          <Clock /> <b>{summary.izin}</b> Izin
+
+        <Card className="p-6 border-2 border-amber-500">
+          <Clock className="mb-2" />
+          <b className="text-xl">{summary.izin}</b>
+          <p>Izin</p>
         </Card>
-        <Card className="p-6 border-l-4 border-slate-500">
-          <CalendarOff /> <b>{summary.libur}</b> Libur
+
+        <Card className="p-6 border-2 border-slate-500">
+          <CalendarOff className="mb-2" />
+          <b className="text-xl">{summary.libur}</b>
+          <p>Libur</p>
         </Card>
       </div>
 
@@ -215,9 +267,28 @@ useEffect(() => {
           ))}
         </select>
 
-        <Button variant="outline">
+        <select
+          className="border px-3 py-2 rounded-md"
+          value={internId}
+          onChange={e =>
+            setInternId(
+              e.target.value === "all"
+                ? "all"
+                : Number(e.target.value)
+            )
+          }
+        >
+          <option value="all">Semua Peserta</option>
+          {interns.map(i => (
+            <option key={i.id} value={i.id}>
+              {i.name}
+            </option>
+          ))}
+        </select>
+
+        <Button variant="outline" onClick={downloadPDF}>
           <Download className="w-4 h-4 mr-2" />
-          Download CSV
+          Download PDF
         </Button>
       </Card>
 
@@ -238,9 +309,15 @@ useEffect(() => {
               <TableRow key={i}>
                 <TableCell>{formatDate(r.date)}</TableCell>
                 <TableCell>{r.day}</TableCell>
-                <TableCell><Badge className="bg-blue-500">{r.hadir}</Badge></TableCell>
-                <TableCell><Badge className="bg-amber-500">{r.izin}</Badge></TableCell>
-                <TableCell><Badge className="bg-slate-500">{r.libur}</Badge></TableCell>
+                <TableCell>
+                  <Badge className="bg-blue-500">{r.hadir}</Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge className="bg-amber-500">{r.izin}</Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge className="bg-slate-500">{r.libur}</Badge>
+                </TableCell>
                 <TableCell>{r.percentage}</TableCell>
               </TableRow>
             ))}
