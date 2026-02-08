@@ -4,7 +4,6 @@ import {
   TrendingUp,
   CheckCircle2,
   Clock,
-  CalendarOff,
 } from "lucide-react";
 
 import { Card } from "../ui/card";
@@ -38,7 +37,7 @@ type Attendance = {
   shift: string;
   jam_masuk: string | null;
   jam_keluar: string | null;
-  status: "hadir" | "izin" | "libur";
+  status: "hadir" | "izin";
 };
 
 type RecapRow = {
@@ -46,7 +45,6 @@ type RecapRow = {
   day: string;
   hadir: number;
   izin: number;
-  libur: number;
   percentage: string;
 };
 
@@ -72,6 +70,44 @@ function monthLabel(key: string) {
   });
 }
 
+/* ===== TERLAMBAT (MENIT) ===== */
+function getLateMinutes(shift: string, jamMasuk: string | null) {
+  if (!jamMasuk) return "-";
+
+  let batas: Date | null = null;
+  if (shift === "shift1") batas = new Date("1970-01-01T07:30:00");
+  if (shift === "shift2") batas = new Date("1970-01-01T12:30:00");
+  if (shift === "piket")  batas = new Date("1970-01-01T08:00:00");
+
+  if (!batas) return "-";
+
+  const masuk = new Date(`1970-01-01T${jamMasuk}`);
+  const diff = Math.floor(
+    (masuk.getTime() - batas.getTime()) / 60000
+  );
+
+  return diff > 0 ? diff.toString() : "-";
+}
+
+/* ===== PULANG CEPAT (MENIT) ===== */
+function getEarlyLeaveMinutes(shift: string, jamKeluar: string | null) {
+  if (!jamKeluar) return "-";
+
+  let batas: Date | null = null;
+  if (shift === "shift1") batas = new Date("1970-01-01T13:30:00");
+  if (shift === "shift2") batas = new Date("1970-01-01T18:30:00");
+  if (shift === "piket")  batas = new Date("1970-01-01T16:00:00");
+
+  if (!batas) return "-";
+
+  const keluar = new Date(`1970-01-01T${jamKeluar}`);
+  const diff = Math.floor(
+    (batas.getTime() - keluar.getTime()) / 60000
+  );
+
+  return diff > 0 ? diff.toString() : "-";
+}
+
 /* ================= COMPONENT ================= */
 export function AttendanceReports() {
   const [interns, setInterns] = useState<Intern[]>([]);
@@ -90,15 +126,17 @@ export function AttendanceReports() {
       for (const intern of internList) {
         const history = await getAttendanceHistory(intern.id);
         history.forEach((h: any) => {
-          all.push({
-            intern_id: intern.id,
-            intern_name: intern.name,
-            tanggal: h.tanggal,
-            shift: h.shift,
-            jam_masuk: h.jam_masuk,
-            jam_keluar: h.jam_keluar,
-            status: h.status,
-          });
+          if (h.status === "hadir" || h.status === "izin") {
+            all.push({
+              intern_id: intern.id,
+              intern_name: intern.name,
+              tanggal: h.tanggal,
+              shift: h.shift,
+              jam_masuk: h.jam_masuk,
+              jam_keluar: h.jam_keluar,
+              status: h.status,
+            });
+          }
         });
       }
       setRawData(all);
@@ -115,7 +153,7 @@ export function AttendanceReports() {
     });
   }, [rawData, month, internId]);
 
-  /* ===== TABLE ===== */
+  /* ===== RECAP TABLE ===== */
   useEffect(() => {
     const grouped: Record<string, Attendance[]> = {};
     filteredData.forEach(d => {
@@ -128,7 +166,6 @@ export function AttendanceReports() {
       ([date, list]) => {
         const hadir = list.filter(l => l.status === "hadir").length;
         const izin = list.filter(l => l.status === "izin").length;
-        const libur = list.filter(l => l.status === "libur").length;
         const aktif = hadir + izin;
 
         return {
@@ -138,7 +175,6 @@ export function AttendanceReports() {
           }),
           hadir,
           izin,
-          libur,
           percentage:
             aktif === 0 ? "—" : `${((hadir / aktif) * 100).toFixed(1)}%`,
         };
@@ -153,162 +189,121 @@ export function AttendanceReports() {
   const summary = useMemo(() => {
     const hadir = filteredData.filter(d => d.status === "hadir").length;
     const izin = filteredData.filter(d => d.status === "izin").length;
-    const libur = filteredData.filter(d => d.status === "libur").length;
     const aktif = hadir + izin;
     const avg = aktif === 0 ? 0 : Number(((hadir / aktif) * 100).toFixed(1));
-    return { hadir, izin, libur, avg };
+    return { hadir, izin, avg };
   }, [filteredData]);
 
   const months = Array.from(
     new Set(rawData.map(d => getMonthKey(d.tanggal)))
   ).sort().reverse();
 
-  /* ===== PDF EXPORT ===== */
+  /* ================= PDF ================= */
   async function downloadPDF() {
-  const doc = new jsPDF({
-    unit: "mm",
-    format: "a4",
-  });
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4",
+    });
 
-  const marginX = 20;
-  let cursorY = 25;
+    const marginX = 15;
+    let y = 15;
 
-  /* ================= FONT DEFAULT ================= */
-  doc.setFont("Times", "Normal");
-  doc.setFontSize(12);
+    const img = new Image();
+    img.src = "/kai.png";
+    await new Promise(r => (img.onload = r));
+    doc.addImage(img, "PNG", marginX, y, 35, 15);
 
-  /* ================= LOGO ================= */
-  const img = new Image();
-  img.src = "/kai.png";
-  await new Promise(r => (img.onload = r));
-  doc.addImage(img, "PNG", marginX, cursorY, 45, 20);
+    doc.setFont("Times", "Bold");
+    doc.setFontSize(14);
+    doc.text("LAPORAN ABSENSI PESERTA MAGANG", 148, y + 6, {
+      align: "center",
+    });
 
-  /* ================= TITLE ================= */
-  doc.setFont("Times", "Bold");
-  doc.setFontSize(14);
-  doc.text("LAPORAN ABSENSI", 105, cursorY + 30, {
-    align: "center",
-  });
+    doc.setFont("Times", "Normal");
+    doc.setFontSize(11);
+    doc.text(
+      "PT Kereta Api Indonesia (Persero)",
+      148,
+      y + 12,
+      { align: "center" }
+    );
 
-  cursorY += 45;
+    y += 22;
+    doc.line(marginX, y, 297 - marginX, y);
+    y += 8;
 
-  /* ================= INFO ================= */
-  doc.setFont("Times", "Normal");
-  doc.setFontSize(12);
+    doc.text("Periode", marginX, y);
+    doc.text(":", marginX + 28, y);
+    doc.text(month ? monthLabel(month) : "Semua Bulan", marginX + 33, y);
 
-  const labelWidth = 30;
+    doc.text("Peserta", 180, y);
+    doc.text(":", 205, y);
+    doc.text(
+      internId === "all"
+        ? "Semua Peserta"
+        : interns.find(i => i.id === internId)?.name || "-",
+      210,
+      y
+    );
 
-  doc.text("Periode", marginX, cursorY);
-  doc.text(":", marginX + labelWidth, cursorY);
-  doc.text(
-    month ? monthLabel(month) : "Semua Bulan",
-    marginX + labelWidth + 5,
-    cursorY
-  );
+    y += 10;
 
-  cursorY += 7;
-
-  doc.text("Peserta", marginX, cursorY);
-  doc.text(":", marginX + labelWidth, cursorY);
-  doc.text(
-    internId === "all"
-      ? "Semua Peserta"
-      : interns.find(i => i.id === internId)?.name || "-",
-    marginX + labelWidth + 5,
-    cursorY
-  );
-
-  cursorY += 12;
-
-  /* ================= TABLE ================= */
-  autoTable(doc, {
-    startY: cursorY,
-    styles: {
-      font: "Times",
-      fontSize: 12,
-      lineWidth: 0.3,
-      lineColor: [0, 0, 0],
-      valign: "middle",
-    },
-    headStyles: {
-      fillColor: [10, 35, 66], // NAVY
-      textColor: 255,
-      fontStyle: "bold",
-      halign: "center",
-      lineWidth: 0.3,
-      lineColor: [0, 0, 0],
-    },
-    bodyStyles: {
-      lineWidth: 0.3,
-      lineColor: [0, 0, 0],
-    },
-    columnStyles: {
-      0: { halign: "center" }, // tanggal
-      1: { halign: "left" },   // nama
-      2: { halign: "center" }, // status
-      3: { halign: "center" }, // shift
-      4: { halign: "center" }, // masuk
-      5: { halign: "center" }, // keluar
-      6: { halign: "center" }, // keterangan
-    },
-    head: [
-      [
-        "Tanggal",
-        "Nama",
-        "Status",
-        "Shift",
-        "Jam Masuk",
-        "Jam Keluar",
-        "Keterangan Waktu",
+    autoTable(doc, {
+      startY: y,
+      styles: {
+        font: "Times",
+        fontSize: 11,
+        cellPadding: 3,
+        valign: "middle",
+      },
+      headStyles: {
+        fillColor: [10, 35, 66],
+        textColor: 255,
+        fontStyle: "bold",
+        halign: "center",
+      },
+      bodyStyles: { halign: "center" },
+      columnStyles: {
+        1: { halign: "left" },
+      },
+      head: [
+        [
+          "Tanggal",
+          "Nama",
+          "Status",
+          "Shift",
+          "Jam Masuk",
+          "Jam Keluar",
+          "Terlambat (Menit)",
+          "Pulang Cepat (Menit)",
+        ],
       ],
-    ],
-    body: filteredData.map(d => {
-      let ket = "-";
-
-      if (d.jam_masuk) {
-        const masuk = new Date(`1970-01-01T${d.jam_masuk}`);
-        const batas =
-          d.shift === "shift1"
-            ? new Date("1970-01-01T07:30:00")
-            : new Date("1970-01-01T13:30:00");
-
-        const diff = Math.floor(
-          (masuk.getTime() - batas.getTime()) / 60000
-        );
-
-        ket = diff > 0 ? `TERLAMBAT ${diff} MENIT` : "TEPAT WAKTU";
-      }
-
-      return [
+      body: filteredData.map(d => [
         formatDate(d.tanggal),
         d.intern_name,
         d.status.toUpperCase(),
-        d.shift,
+        d.shift || "-",
         d.jam_masuk || "-",
         d.jam_keluar || "-",
-        ket,
-      ];
-    }),
-  });
+        getLateMinutes(d.shift, d.jam_masuk),
+        getEarlyLeaveMinutes(d.shift, d.jam_keluar),
+      ]),
+    });
 
-  /* ================= SAVE ================= */
-  doc.save(
-    internId === "all"
-      ? "laporan_absensi_semua_peserta.pdf"
-      : `laporan_absensi_${interns.find(i => i.id === internId)?.name}.pdf`
-  );
-}
-
-
-
+    doc.save(
+      internId === "all"
+        ? "Laporan_Absensi_Peserta_Magang.pdf"
+        : `Laporan_Absensi_${interns.find(i => i.id === internId)?.name}.pdf`
+    );
+  }
 
   /* ================= UI ================= */
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">Laporan Absensi</h2>
 
-      {/* SUMMARY CARD — WARNA JANGAN DIUBAH */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="p-6 border-2 border-green-500">
           <TrendingUp className="mb-2" />
           <b className="text-xl">{summary.avg}%</b>
@@ -325,12 +320,6 @@ export function AttendanceReports() {
           <Clock className="mb-2" />
           <b className="text-xl">{summary.izin}</b>
           <p>Izin</p>
-        </Card>
-
-        <Card className="p-6 border-2 border-slate-500">
-          <CalendarOff className="mb-2" />
-          <b className="text-xl">{summary.libur}</b>
-          <p>Libur</p>
         </Card>
       </div>
 
@@ -381,7 +370,6 @@ export function AttendanceReports() {
               <TableHead>Hari</TableHead>
               <TableHead>Hadir</TableHead>
               <TableHead>Izin</TableHead>
-              <TableHead>Libur</TableHead>
               <TableHead>%</TableHead>
             </TableRow>
           </TableHeader>
@@ -395,9 +383,6 @@ export function AttendanceReports() {
                 </TableCell>
                 <TableCell>
                   <Badge className="bg-amber-500">{r.izin}</Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge className="bg-slate-500">{r.libur}</Badge>
                 </TableCell>
                 <TableCell>{r.percentage}</TableCell>
               </TableRow>
