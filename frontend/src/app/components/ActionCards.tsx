@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
 import { Card } from "./ui/card";
-import { LogOut, Loader2, ArrowRight, CalendarX } from "lucide-react";
+import { LogOut, ArrowRight } from "lucide-react";
 import { SHIFTS, ShiftKey } from "./IdentitySection";
 import {
   checkInAttendance,
@@ -9,65 +8,47 @@ import {
 
 interface ActionCardsProps {
   internId: number;
-  shift: ShiftKey | "libur" | "izin" | "";
-  onSuccess: () => void;
+  shift: ShiftKey | "";
+  alreadyCheckedIn: boolean;
+  alreadyCheckedOut: boolean;
+  onCheckInSuccess: () => void;   // ✅ WAJIB
+  onCheckOutSuccess: () => void;  // ✅ WAJIB
 }
 
 export function ActionCards({
   internId,
   shift,
-  onSuccess,
+  alreadyCheckedIn,
+  alreadyCheckedOut,
+  onCheckInSuccess,
+  onCheckOutSuccess,
 }: ActionCardsProps) {
-  const [loading, setLoading] = useState(false);
-  const [hasCheckedIn, setHasCheckedIn] = useState(false);
-  const [hasCheckedOut, setHasCheckedOut] = useState(false);
+  const shiftData = shift ? SHIFTS[shift] : null;
 
-  /* ================= RESET JIKA SHIFT BERUBAH ================= */
-  useEffect(() => {
-    setHasCheckedIn(false);
-    setHasCheckedOut(false);
-  }, [shift]);
-
-  const isSpecial = shift === "libur" || shift === "izin";
-
-  const shiftData =
-    shift && !isSpecial ? SHIFTS[shift] : null;
-
-  /* ================= DISABLED STATE ================= */
   const checkInDisabled =
-    loading || hasCheckedIn || !shift;
+    alreadyCheckedIn || !shift;
 
   const checkOutDisabled =
-    loading ||
-    !hasCheckedIn ||
-    hasCheckedOut ||
-    isSpecial;
+    !alreadyCheckedIn || alreadyCheckedOut;
 
-  /* ================= HANDLER ================= */
   async function handleCheckIn() {
-    if (checkInDisabled || !shift) return;
+    if (checkInDisabled) return;
 
     try {
-      setLoading(true);
-
       await checkInAttendance({
         intern_id: internId,
         shift,
       });
 
-      setHasCheckedIn(true);
-
-      // Libur & Izin langsung selesai
-      if (isSpecial) {
-        setHasCheckedOut(true);
+      // 🔥 UI update
+      onCheckInSuccess();
+    } catch (err: any) {
+      // kalau backend bilang sudah ada, anggap sukses
+      if (err?.message?.includes("sudah ada")) {
+        onCheckInSuccess();
+        return;
       }
-
-      onSuccess();
-    } catch (e) {
-      console.error(e);
-      alert("Gagal melakukan absensi");
-    } finally {
-      setLoading(false);
+      alert(err.message || "Gagal check-in");
     }
   }
 
@@ -75,129 +56,66 @@ export function ActionCards({
     if (checkOutDisabled) return;
 
     try {
-      setLoading(true);
-
       await checkOutAttendance({
         intern_id: internId,
       });
-
-      setHasCheckedOut(true);
-      onSuccess();
-    } catch (e) {
-      console.error(e);
-      alert("Gagal check-out");
-    } finally {
-      setLoading(false);
+      onCheckOutSuccess();
+    } catch (err: any) {
+      alert(err.message || "Gagal check-out");
     }
   }
 
-  /* ================= LABEL ================= */
-  const checkInTitle =
-    shift === "libur"
-      ? "Libur"
-      : shift === "izin"
-      ? "Izin"
-      : "Check In";
-
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-
-      {/* ================= CHECK IN / IZIN / LIBUR ================= */}
+      {/* CHECK IN */}
       <Card
         onClick={checkInDisabled ? undefined : handleCheckIn}
-        className={`p-5 rounded-xl shadow-md transition-all text-white
-          ${
-            checkInDisabled
-              ? "bg-blue-300 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700 cursor-pointer"
-          }`}
+        className={`p-5 rounded-xl text-white ${
+          checkInDisabled
+            ? "bg-blue-300 cursor-not-allowed"
+            : "bg-blue-600 hover:bg-blue-700 cursor-pointer"
+        }`}
       >
-        <div className="flex justify-between items-start">
+        <div className="flex justify-between">
           <div>
             <h3 className="text-xl font-bold italic">
-              {checkInTitle}
+              {alreadyCheckedIn ? "Sudah Check In" : "Check In"}
             </h3>
-
             {shiftData && (
               <>
-                <p className="text-xs mt-1">
-                  {shiftData.label}
-                </p>
-                <p className="text-xs">
-                  Jam Masuk: {shiftData.start}
-                </p>
+                <p className="text-xs">{shiftData.label}</p>
+                <p className="text-xs">Jam Masuk: {shiftData.start}</p>
               </>
             )}
-
-            {shift === "libur" && (
-              <p className="text-xs mt-2 italic">
-                Hari Libur
-              </p>
-            )}
-
-            {shift === "izin" && (
-              <p className="text-xs mt-2 italic">
-                Izin Tidak Masuk
-              </p>
-            )}
-
-            {!shift && (
-              <p className="text-xs mt-2 italic opacity-80">
-                Pilih shift / izin / libur
-              </p>
-            )}
           </div>
-
-          <div className="bg-white/10 p-2 rounded-lg">
-            {loading && !hasCheckedIn ? (
-              <Loader2 className="animate-spin w-5 h-5" />
-            ) : isSpecial ? (
-              <CalendarX className="w-6 h-6" />
-            ) : (
-              <ArrowRight className="w-6 h-6" />
-            )}
-          </div>
+          <ArrowRight />
         </div>
       </Card>
 
-      {/* ================= CHECK OUT ================= */}
+      {/* CHECK OUT */}
       <Card
         onClick={checkOutDisabled ? undefined : handleCheckOut}
-        className={`p-5 rounded-xl shadow-md transition-all text-white
-          ${
-            checkOutDisabled
-              ? "bg-slate-300 cursor-not-allowed"
-              : "bg-slate-500 hover:bg-slate-600 cursor-pointer"
-          }`}
+        className={`p-5 rounded-xl text-white ${
+          checkOutDisabled
+            ? "bg-slate-300 cursor-not-allowed"
+            : "bg-slate-500 hover:bg-slate-600 cursor-pointer"
+        }`}
       >
-        <div className="flex justify-between items-start">
+        <div className="flex justify-between">
           <div>
             <h3 className="text-xl font-bold italic">
-              Check Out
+              {alreadyCheckedOut ? "Sudah Check Out" : "Check Out"}
             </h3>
-
-            {shiftData ? (
+            {shiftData && (
               <>
-                <p className="text-xs mt-1">
-                  {shiftData.label}
-                </p>
-                <p className="text-xs">
-                  Jam Keluar: realtime
-                </p>
+                <p className="text-xs">{shiftData.label}</p>
+                <p className="text-xs">Jam Keluar: realtime</p>
               </>
-            ) : (
-              <p className="text-xs mt-2 italic opacity-80">
-                Tidak perlu checkout
-              </p>
             )}
           </div>
-
-          <div className="bg-white/10 p-2 rounded-lg">
-            <LogOut className="w-6 h-6" />
-          </div>
+          <LogOut />
         </div>
       </Card>
-
     </div>
   );
 }

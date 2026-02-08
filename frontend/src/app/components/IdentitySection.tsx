@@ -30,12 +30,18 @@ export const SHIFTS = {
 export type ShiftKey = keyof typeof SHIFTS;
 export type AttendanceType = ShiftKey | "izin";
 
+export interface Intern {
+  id: number;
+  name: string;
+  school: string;
+}
 
 interface IdentitySectionProps {
-  interns: any[];
+  interns: Intern[];
   userName: string;
   school: string;
   selectedShift: AttendanceType | "";
+  isLocked: boolean; // 🔒 KUNCI SETELAH CHECK-IN
   onUserNameChange: (name: string) => void;
   onShiftChange: (shift: AttendanceType) => void;
 }
@@ -45,35 +51,33 @@ export function IdentitySection({
   userName,
   school,
   selectedShift,
+  isLocked,
   onUserNameChange,
   onShiftChange,
 }: IdentitySectionProps) {
   return (
-    <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
-      <div className="flex flex-col md:flex-row items-start gap-4">
-        {/* Avatar */}
+    <Card className="p-6 bg-white shadow-sm rounded-2xl">
+      <div className="flex gap-4">
         <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
           <User className="w-6 h-6 text-white" />
         </div>
 
-        <div className="flex-1 w-full">
-          <div className="mb-4">
-            <h2 className="font-bold text-lg text-slate-800">
-              Identitas Peserta
-            </h2>
-            <p className="text-xs text-slate-500">
-              Pilih nama dan status kehadiran hari ini.
-            </p>
-          </div>
+        <div className="flex-1">
+          <h2 className="font-bold text-lg text-slate-800">
+            Identitas Peserta
+          </h2>
+          <p className="text-xs text-slate-500 mb-4">
+            Pilih nama dan status kehadiran hari ini.
+          </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Nama */}
+            {/* NAMA */}
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-bold text-slate-600 uppercase">
+              <Label className="text-[11px] font-bold uppercase">
                 Nama Peserta
               </Label>
               <Select value={userName} onValueChange={onUserNameChange}>
-                <SelectTrigger className="h-10 bg-slate-50 border-slate-200 rounded-lg">
+                <SelectTrigger>
                   <SelectValue placeholder="Pilih nama" />
                 </SelectTrigger>
                 <SelectContent>
@@ -86,43 +90,48 @@ export function IdentitySection({
               </Select>
             </div>
 
-            {/* Sekolah */}
+            {/* SEKOLAH */}
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-bold text-slate-600 uppercase">
+              <Label className="text-[11px] font-bold uppercase">
                 Asal Sekolah / Kampus
               </Label>
-              <div className="h-10 px-3 flex items-center bg-slate-100 border border-slate-200 rounded-lg text-slate-500 text-sm">
+              <div className="h-10 px-3 flex items-center bg-slate-100 rounded-lg text-sm">
                 {school || "—"}
               </div>
             </div>
 
-            {/* Shift / Libur / Izin */}
+            {/* STATUS KEHADIRAN */}
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-bold text-slate-600 uppercase">
+              <Label className="text-[11px] font-bold uppercase">
                 Status Kehadiran
               </Label>
+
               <Select
                 value={selectedShift}
+                disabled={isLocked}   // 🔒 DIKUNCI DI SINI
                 onValueChange={(value) =>
                   onShiftChange(value as AttendanceType)
                 }
               >
-                <SelectTrigger className="h-10 bg-slate-50 border-slate-200 rounded-lg">
+                <SelectTrigger>
                   <SelectValue placeholder="Pilih status" />
                 </SelectTrigger>
 
                 <SelectContent>
-                  {/* ===== SHIFT ===== */}
                   {Object.entries(SHIFTS).map(([key, shift]) => (
                     <SelectItem key={key} value={key}>
                       {shift.label}
                     </SelectItem>
                   ))}
-
-                  {/* ===== LIBUR & IZIN ===== */}
                   <SelectItem value="izin">Izin</SelectItem>
                 </SelectContent>
               </Select>
+
+              {isLocked && (
+                <p className="text-[11px] text-slate-400 italic">
+                  Status kehadiran terkunci setelah check-in
+                </p>
+              )}
             </div>
           </div>
         </div>
